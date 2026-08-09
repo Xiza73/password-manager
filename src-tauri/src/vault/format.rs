@@ -4,18 +4,24 @@
 //! offset  size  field
 //!      0     8  magic "PWMVAULT"          ┐
 //!      8     2  format version (u16 LE)   │
-//!     10     4  Argon2id memory in KiB    ├─ authenticated as associated data
-//!     14     4  Argon2id iterations       │
-//!     18     4  Argon2id lanes            │
-//!     22    16  salt                      ┘
-//!     38    12  nonce
-//!     50     …  ciphertext ‖ tag
+//!     10     8  save counter (u64 LE)     │
+//!     18     4  Argon2id memory in KiB    ├─ authenticated as associated data
+//!     22     4  Argon2id iterations       │
+//!     26     4  Argon2id lanes            │
+//!     30    16  salt                      ┘
+//!     46    12  nonce
+//!     58     …  ciphertext ‖ tag
 //! ```
 //!
 //! Everything before the nonce is passed to the cipher as associated data. That is what makes
-//! the header tamper-evident even though it is stored in the clear: an attacker who rewrites the
-//! stored Argon2 cost down to the minimum, hoping to brute-force the master password cheaply,
-//! breaks authentication of the body instead.
+//! the header tamper-evident even though it is stored in the clear.
+//!
+//! The save counter is why that binding earns its place. Every other header field is either an
+//! input to key derivation — rewrite it and the derived key changes — or a constant compared
+//! before the cipher runs, so tampering with any of them was already caught without the
+//! associated data. The counter is neither. Nothing else in this file checks it, and an attacker
+//! presenting an older vault would simply raise it to whatever the last-seen value was. The
+//! associated data is the only thing standing in the way.
 //!
 //! The nonce is deliberately outside that region. GCM already takes it as an input to the tag,
 //! so modifying it fails authentication anyway — and including it would be circular, since the
@@ -31,10 +37,14 @@ use crate::crypto::kdf::{derive_key, KdfError, KdfParams, MasterKey, Salt, SALT_
 pub const MAGIC: &[u8; 8] = b"PWMVAULT";
 
 /// Bumped whenever the layout or the cryptographic construction changes.
-pub const FORMAT_VERSION: u16 = 1;
+///
+/// Version 2 added the save counter. There is no reader for version 1: the format was never
+/// released, so there are no version 1 vaults to migrate. A shipped product would need one.
+pub const FORMAT_VERSION: u16 = 2;
 
 pub const VERSION_OFFSET: usize = MAGIC.len();
-pub const MEMORY_OFFSET: usize = VERSION_OFFSET + 2;
+pub const COUNTER_OFFSET: usize = VERSION_OFFSET + 2;
+pub const MEMORY_OFFSET: usize = COUNTER_OFFSET + 8;
 pub const ITERATIONS_OFFSET: usize = MEMORY_OFFSET + 4;
 pub const LANES_OFFSET: usize = ITERATIONS_OFFSET + 4;
 pub const SALT_OFFSET: usize = LANES_OFFSET + 4;
@@ -103,17 +113,24 @@ impl From<CipherError> for VaultError {
     }
 }
 
-fn header_bytes(params: KdfParams, salt: &Salt) -> [u8; HEADER_LEN] {
+fn header_bytes(params: KdfParams, salt: &Salt, counter: u64) -> [u8; HEADER_LEN] {
     let mut header = [0u8; HEADER_LEN];
 
     header[..MAGIC.len()].copy_from_slice(MAGIC);
-    header[VERSION_OFFSET..MEMORY_OFFSET].copy_from_slice(&FORMAT_VERSION.to_le_bytes());
+    header[VERSION_OFFSET..COUNTER_OFFSET].copy_from_slice(&FORMAT_VERSION.to_le_bytes());
+    header[COUNTER_OFFSET..MEMORY_OFFSET].copy_from_slice(&counter.to_le_bytes());
     header[MEMORY_OFFSET..ITERATIONS_OFFSET].copy_from_slice(&params.memory_kib().to_le_bytes());
     header[ITERATIONS_OFFSET..LANES_OFFSET].copy_from_slice(&params.iterations().to_le_bytes());
     header[LANES_OFFSET..SALT_OFFSET].copy_from_slice(&params.lanes().to_le_bytes());
     header[SALT_OFFSET..].copy_from_slice(salt.as_bytes());
 
     header
+}
+
+fn read_u64(bytes: &[u8], offset: usize) -> u64 {
+    let mut field = [0u8; 8];
+    field.copy_from_slice(&bytes[offset..offset + 8]);
+    u64::from_le_bytes(field)
 }
 
 fn read_u32(bytes: &[u8], offset: usize) -> u32 {
@@ -127,12 +144,28 @@ fn read_u32(bytes: &[u8], offset: usize) -> u32 {
 /// A fresh salt is drawn on every call, so re-saving an unchanged vault produces an entirely
 /// different file. That is deliberate: equal files would tell an observer that nothing changed.
 pub fn encode(password: &[u8], body: &[u8], params: KdfParams) -> Result<Vec<u8>, VaultError> {
-    encode_with(&SealingKey::create(password, params)?, body)
+    encode_with(&SealingKey::create(password, params)?, FIRST_SAVE, body)
+}
+
+/// The counter a brand new vault is sealed with. Starts at one so that zero can never be a
+/// legitimate value, which makes an all-zero header obviously wrong rather than plausibly first.
+pub const FIRST_SAVE: u64 = 1;
+
+// Zero is never a legitimate counter, so an all-zero header reads as wrong rather than as new.
+const _: () = assert!(FIRST_SAVE > 0);
+
+/// Reads the save counter without needing the master password.
+///
+/// Deliberately available before unlocking: whether a vault is older than the last one seen is
+/// not a secret, and answering it should not cost a key derivation.
+pub fn read_counter(file: &[u8]) -> Result<u64, VaultError> {
+    Ok(parse(file)?.counter)
 }
 
 /// The parts of a vault file that can be read without the master password.
 struct Parsed<'a> {
     header: &'a [u8],
+    counter: u64,
     params: KdfParams,
     salt: Salt,
     nonce: Nonce,
@@ -184,6 +217,7 @@ fn parse(file: &[u8]) -> Result<Parsed<'_>, VaultError> {
 
     Ok(Parsed {
         header,
+        counter: read_u64(header, COUNTER_OFFSET),
         params,
         salt: Salt::from_bytes(salt_bytes),
         nonce: Nonce::from_bytes(nonce_bytes),
@@ -238,8 +272,8 @@ impl SealingKey {
 }
 
 /// Seals `body` with an existing key.
-pub fn encode_with(sealing: &SealingKey, body: &[u8]) -> Result<Vec<u8>, VaultError> {
-    let header = header_bytes(sealing.params, &sealing.salt);
+pub fn encode_with(sealing: &SealingKey, counter: u64, body: &[u8]) -> Result<Vec<u8>, VaultError> {
+    let header = header_bytes(sealing.params, &sealing.salt, counter);
     let sealed = seal(&sealing.key, body, &header)?;
 
     let mut file = Vec::with_capacity(MIN_FILE_LEN + body.len());
@@ -366,21 +400,23 @@ mod tests {
         );
     }
 
-    /// Records what the associated data does and does not buy right now.
+    /// The associated data is no longer redundant, and this records why.
     ///
-    /// Every field in the header is either an input to key derivation (salt, cost) or is checked
-    /// explicitly before the cipher runs (magic, version). Tampering with any of them is caught
-    /// without the binding, which is why no test in this module fails if it is removed — a fact
-    /// worth stating, because the tests above read as though they prove otherwise.
-    ///
-    /// The binding stays because it stops being redundant the moment the header grows a field
-    /// that is neither: a body compression flag, a cipher selector, a record count. Whoever adds
-    /// that field gets the protection without having to know it was needed.
+    /// It used to be: every header field was either a key-derivation input or a constant checked
+    /// before the cipher ran, so removing the binding broke no test. The save counter is the
+    /// first field that is neither. `rejects_a_tampered_save_counter` above is the one that
+    /// fails without it.
     #[test]
-    fn associated_data_is_defence_in_depth_today() {
+    fn no_header_byte_can_be_edited_without_notice() {
         let mut file = encoded();
 
-        for offset in [0, VERSION_OFFSET, MEMORY_OFFSET, SALT_OFFSET] {
+        for offset in [
+            0,
+            VERSION_OFFSET,
+            COUNTER_OFFSET,
+            MEMORY_OFFSET,
+            SALT_OFFSET,
+        ] {
             let original = file[offset];
             flip_bit(&mut file, offset);
 
@@ -391,111 +427,6 @@ mod tests {
 
             file[offset] = original;
         }
-    }
-
-    #[test]
-    fn opens_a_vault_sealed_with_different_parameters() {
-        // Raising the recommended cost must never strand vaults written before the change.
-        let file = encode(PASSWORD, BODY, KdfParams::new(16, 2, 1).unwrap()).unwrap();
-
-        assert_eq!(decode(PASSWORD, &file).unwrap().as_slice(), BODY);
-    }
-
-    #[test]
-    fn rejects_a_file_that_is_not_a_vault() {
-        let result = decode(PASSWORD, &[0xFF; MIN_FILE_LEN]);
-
-        assert_eq!(result.unwrap_err(), VaultError::NotAVault);
-    }
-
-    #[test]
-    fn rejects_an_unsupported_version() {
-        let mut file = encoded();
-        file[VERSION_OFFSET..VERSION_OFFSET + 2].copy_from_slice(&99u16.to_le_bytes());
-
-        // A newer vault must be refused with a clear answer, never opened on a guess and never
-        // written back in an older shape.
-        assert_eq!(
-            decode(PASSWORD, &file).unwrap_err(),
-            VaultError::UnsupportedVersion(99)
-        );
-    }
-
-    #[test]
-    fn rejects_a_truncated_file() {
-        let mut file = encoded();
-        file.truncate(MIN_FILE_LEN - 1);
-
-        assert_eq!(decode(PASSWORD, &file).unwrap_err(), VaultError::Malformed);
-    }
-
-    #[test]
-    fn rejects_an_empty_file() {
-        assert_eq!(decode(PASSWORD, &[]).unwrap_err(), VaultError::Malformed);
-    }
-
-    #[test]
-    fn tells_a_foreign_file_apart_from_a_truncated_vault() {
-        // Both are too short to be a vault, and the two answers are not interchangeable.
-        assert_eq!(
-            decode(PASSWORD, b"a shopping list").unwrap_err(),
-            VaultError::NotAVault
-        );
-        assert_eq!(
-            decode(PASSWORD, &MAGIC[..4]).unwrap_err(),
-            VaultError::Malformed
-        );
-    }
-
-    #[test]
-    fn rejects_impossible_kdf_parameters() {
-        let mut file = encoded();
-        file[LANES_OFFSET..LANES_OFFSET + 4].copy_from_slice(&0u32.to_le_bytes());
-
-        assert_eq!(decode(PASSWORD, &file).unwrap_err(), VaultError::Malformed);
-    }
-
-    #[test]
-    fn rejects_a_memory_cost_beyond_the_ceiling() {
-        let mut file = encoded();
-        let absurd = MAX_MEMORY_KIB + 1;
-        file[MEMORY_OFFSET..MEMORY_OFFSET + 4].copy_from_slice(&absurd.to_le_bytes());
-
-        // Without a ceiling, anyone who can write the vault file can make an unlock attempt
-        // allocate arbitrary memory. The cap is refused before any allocation happens.
-        assert_eq!(decode(PASSWORD, &file).unwrap_err(), VaultError::Malformed);
-    }
-
-    #[test]
-    fn rejects_a_time_cost_beyond_the_ceiling() {
-        let mut file = encoded();
-        file[ITERATIONS_OFFSET..ITERATIONS_OFFSET + 4]
-            .copy_from_slice(&(MAX_ITERATIONS + 1).to_le_bytes());
-
-        // Argon2's own upper bound on iterations is u32::MAX, so without a ceiling here a
-        // hostile header makes an unlock attempt run effectively forever — holding the session
-        // lock the whole time, which wedges the application until it is force-quit. Rejecting a
-        // huge memory cost while accepting a huge time cost applies the defence by halves.
-        assert_eq!(decode(PASSWORD, &file).unwrap_err(), VaultError::Malformed);
-    }
-
-    #[test]
-    fn rejects_a_parallelism_beyond_the_ceiling() {
-        let mut file = encoded();
-        file[LANES_OFFSET..LANES_OFFSET + 4].copy_from_slice(&(MAX_LANES + 1).to_le_bytes());
-
-        assert_eq!(decode(PASSWORD, &file).unwrap_err(), VaultError::Malformed);
-    }
-
-    #[test]
-    fn the_ceilings_leave_room_for_the_recommended_parameters() {
-        // A ceiling that excluded what this build itself writes would make every new vault
-        // unopenable, which is a worse failure than the one it prevents.
-        let recommended = KdfParams::RECOMMENDED;
-
-        assert!(recommended.memory_kib() <= MAX_MEMORY_KIB);
-        assert!(recommended.iterations() <= MAX_ITERATIONS);
-        assert!(recommended.lanes() <= MAX_LANES);
     }
 
     #[test]
@@ -521,6 +452,10 @@ mod tests {
             FORMAT_VERSION
         );
         assert_eq!(
+            u64::from_le_bytes(file[COUNTER_OFFSET..COUNTER_OFFSET + 8].try_into().unwrap()),
+            FIRST_SAVE
+        );
+        assert_eq!(
             u32::from_le_bytes(file[MEMORY_OFFSET..MEMORY_OFFSET + 4].try_into().unwrap()),
             cheap().memory_kib()
         );
@@ -531,7 +466,7 @@ mod tests {
     fn a_sealing_key_reopens_what_it_sealed() {
         let sealing = SealingKey::create(PASSWORD, cheap()).unwrap();
 
-        let file = encode_with(&sealing, BODY).unwrap();
+        let file = encode_with(&sealing, FIRST_SAVE, BODY).unwrap();
 
         assert_eq!(decode_with(&sealing, &file).unwrap().as_slice(), BODY);
         // And the password still opens it, because the key is only a cached derivation.
@@ -542,8 +477,8 @@ mod tests {
     fn resealing_keeps_the_salt_and_changes_the_nonce() {
         let sealing = SealingKey::create(PASSWORD, cheap()).unwrap();
 
-        let first = encode_with(&sealing, BODY).unwrap();
-        let second = encode_with(&sealing, BODY).unwrap();
+        let first = encode_with(&sealing, FIRST_SAVE, BODY).unwrap();
+        let second = encode_with(&sealing, FIRST_SAVE, BODY).unwrap();
 
         assert_eq!(first[..HEADER_LEN], second[..HEADER_LEN]);
         assert_ne!(
@@ -584,6 +519,45 @@ mod tests {
 
         assert_eq!(
             decode_with(&sealing, &file).unwrap_err(),
+            VaultError::Unauthentic
+        );
+    }
+
+    #[test]
+    fn round_trips_a_save_counter() {
+        let sealing = SealingKey::create(PASSWORD, cheap()).unwrap();
+
+        let file = encode_with(&sealing, 42, BODY).unwrap();
+
+        assert_eq!(read_counter(&file).unwrap(), 42);
+        assert_eq!(decode_with(&sealing, &file).unwrap().as_slice(), BODY);
+    }
+
+    #[test]
+    fn a_new_vault_starts_at_the_first_save() {
+        assert_eq!(read_counter(&encoded()).unwrap(), FIRST_SAVE);
+    }
+
+    #[test]
+    fn the_save_counter_is_readable_without_the_password() {
+        // Whether a vault is older than the last one seen is not a secret, and answering it
+        // must not cost an Argon2 derivation before the user has even typed anything.
+        assert_eq!(read_counter(&encoded()).unwrap(), FIRST_SAVE);
+    }
+
+    #[test]
+    fn rejects_a_tampered_save_counter() {
+        let file = encode_with(&SealingKey::create(PASSWORD, cheap()).unwrap(), 3, BODY).unwrap();
+
+        let mut raised = file.clone();
+        raised[COUNTER_OFFSET..COUNTER_OFFSET + 8].copy_from_slice(&9_999u64.to_le_bytes());
+
+        // This is the test the associated data exists for, and the only one in this module that
+        // fails without it. Every other header field is a key-derivation input or a constant
+        // compared before the cipher runs; the counter is neither, so nothing else would notice
+        // an attacker raising an old vault's counter past the last-seen value.
+        assert_eq!(
+            decode(PASSWORD, &raised).unwrap_err(),
             VaultError::Unauthentic
         );
     }

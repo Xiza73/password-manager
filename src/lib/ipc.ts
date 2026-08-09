@@ -100,7 +100,11 @@ export const vault = {
 
   create: (password: string) => call<void>('create_vault', { password }),
 
-  unlock: (password: string) => call<void>('unlock', { password }),
+  /**
+   * Opens the vault. Succeeds even when the vault turns out to be older than the last one opened
+   * on this machine — the answer says so rather than refusing.
+   */
+  unlock: (password: string) => call<Unlocked>('unlock', { password }),
 
   lock: () => call<void>('lock'),
 
@@ -125,6 +129,14 @@ export const vault = {
    */
   copyPassword: (id: string) => call<CopyOutcome>('copy_password', { id }),
 };
+
+export interface Unlocked {
+  /**
+   * The vault carries a lower save counter than one already opened here: a stale copy from a
+   * sync folder, a half-restored backup, or a file someone swapped.
+   */
+  rolledBack: boolean;
+}
 
 export interface CopyOutcome {
   secondsUntilClear: number;

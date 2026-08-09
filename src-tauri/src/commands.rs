@@ -18,7 +18,9 @@ use zeroize::Zeroizing;
 use crate::clipboard::ClipboardHolder;
 use crate::crypto::generator::{generate, GeneratedPassword, GeneratorError, GeneratorOptions};
 use crate::secret::SecretString;
-use crate::session::{RevealedCredential, Session, SessionError, MIN_MASTER_PASSWORD_LEN};
+use crate::session::{
+    RevealedCredential, Session, SessionError, Unlocked, MIN_MASTER_PASSWORD_LEN,
+};
 use crate::vault::entries::{CredentialDraft, CredentialSummary, EntryError, EntryId};
 use crate::vault::format::VaultError;
 
@@ -110,7 +112,9 @@ pub fn create_vault(password: SecretString, state: State<'_, AppState>) -> Resul
 }
 
 #[tauri::command]
-pub fn unlock(password: SecretString, state: State<'_, AppState>) -> Result<(), IpcError> {
+pub fn unlock(password: SecretString, state: State<'_, AppState>) -> Result<Unlocked, IpcError> {
+    // Succeeds even when the vault turns out to be older than the last one opened here; the
+    // answer says so rather than refusing. See `Unlocked::rolled_back`.
     with_session(&state, |session| session.unlock(&password, Instant::now()))
 }
 

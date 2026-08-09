@@ -18,8 +18,8 @@ use crate::secret::SecretString;
 use crate::vault::entries::{
     Credential, CredentialDraft, CredentialSummary, EntryError, EntryId, VaultData,
 };
-use crate::vault::format::{decode_with, SealingKey, VaultError};
-use crate::vault::storage::{exists, read_sealed, save_sealed, StorageError};
+use crate::vault::format::{decode_with, read_counter, SealingKey, VaultError, FIRST_SAVE};
+use crate::vault::storage::{exists, highest_seen, read_sealed, save_sealed, StorageError};
 
 /// Shortest master password this application will accept, in characters.
 ///
@@ -45,6 +45,18 @@ pub enum SessionError {
     Entry(#[from] EntryError),
     #[error(transparent)]
     Storage(#[from] StorageError),
+}
+
+/// What opening a vault reports back.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Unlocked {
+    /// True when this vault carries a lower save counter than one already opened here.
+    ///
+    /// Reported rather than refused. A restore from backup is indistinguishable from an attack
+    /// at this level, and locking someone out of credentials they just restored is the worse
+    /// mistake of the two.
+    pub rolled_back: bool,
 }
 
 /// A credential with its secrets, returned only when one entry is asked for by name.
@@ -77,6 +89,8 @@ struct Open {
     sealing: SealingKey,
     data: VaultData,
     last_seen: Instant,
+    /// The counter the next save will write.
+    next_save: u64,
 }
 
 enum State {
@@ -121,19 +135,24 @@ impl Session {
 
         let sealing = SealingKey::create(password.expose().as_bytes(), self.params)?;
         let data = VaultData::new();
-        save_sealed(&self.path, &sealing, &data.to_bytes()?)?;
+        save_sealed(&self.path, &sealing, FIRST_SAVE, &data.to_bytes()?)?;
 
         self.state = State::Open(Open {
             sealing,
             data,
             last_seen: now,
+            next_save: FIRST_SAVE + 1,
         });
 
         Ok(())
     }
 
-    /// Opens an existing vault.
-    pub fn unlock(&mut self, password: &SecretString, now: Instant) -> Result<(), SessionError> {
+    /// Opens an existing vault, reporting whether it is older than the last one seen here.
+    pub fn unlock(
+        &mut self,
+        password: &SecretString,
+        now: Instant,
+    ) -> Result<Unlocked, SessionError> {
         // Read first, so a missing vault is reported as such rather than as a failed unlock.
         let file = match read_sealed(&self.path) {
             Ok(file) => file,
@@ -147,13 +166,22 @@ impl Session {
         let sealing = SealingKey::from_file(password.expose().as_bytes(), &file)?;
         let data = VaultData::from_bytes(&decode_with(&sealing, &file)?)?;
 
+        // Only trustworthy once the body has authenticated: the counter is bound as associated
+        // data, so reading it earlier would be reading an attacker's number.
+        let counter = read_counter(&file)?;
+        let highest = highest_seen(&self.path);
+        let rolled_back = highest.is_some_and(|seen| counter < seen);
+
         self.state = State::Open(Open {
             sealing,
             data,
             last_seen: now,
+            // Step past whichever is higher. A legitimate restore then repairs itself on the
+            // first save instead of warning forever, and a counter is never reused.
+            next_save: counter.max(highest.unwrap_or(0)) + 1,
         });
 
-        Ok(())
+        Ok(Unlocked { rolled_back })
     }
 
     /// Closes the vault, dropping the key and the decrypted contents.
@@ -231,12 +259,17 @@ impl Session {
                     .to_bytes()
                     .map_err(SessionError::from)
                     .and_then(|body| {
-                        save_sealed(&self.path, &open.sealing, &body).map_err(SessionError::from)
+                        save_sealed(&self.path, &open.sealing, open.next_save, &body)
+                            .map_err(SessionError::from)
                     })
             }
         };
 
-        if result.is_err() && self.reload().is_err() {
+        if result.is_ok() {
+            if let State::Open(open) = &mut self.state {
+                open.next_save += 1;
+            }
+        } else if self.reload().is_err() {
             self.lock();
         }
 
@@ -616,6 +649,112 @@ mod tests {
             .map(|summary| summary.site)
             .collect();
         assert_eq!(sites, vec!["saved.com"]);
+    }
+
+    #[test]
+    fn a_current_vault_reports_no_rollback() {
+        let dir = TempDir::new().unwrap();
+        let now = Instant::now();
+        let mut session = unlocked(&dir, now);
+        session.add(draft("a.com", "u", "p"), now).unwrap();
+        session.lock();
+
+        let opened = session.unlock(&secret(MASTER), now).unwrap();
+
+        assert!(!opened.rolled_back);
+    }
+
+    #[test]
+    fn a_first_run_reports_no_rollback() {
+        let dir = TempDir::new().unwrap();
+        let now = Instant::now();
+        unlocked(&dir, now);
+        // No record of any previous save — a fresh installation opening an existing vault, or a
+        // record that was wiped. Silence, not an accusation.
+        std::fs::remove_file(dir.path().join("vault.pwm.seen")).unwrap();
+
+        let opened = session_in(&dir).unlock(&secret(MASTER), now).unwrap();
+
+        assert!(!opened.rolled_back);
+    }
+
+    #[test]
+    fn reports_a_vault_that_was_replaced_with_an_older_copy() {
+        let dir = TempDir::new().unwrap();
+        let now = Instant::now();
+        let path = dir.path().join("vault.pwm");
+        let mut session = unlocked(&dir, now);
+        let backup = std::fs::read(&path).unwrap();
+
+        session.add(draft("a.com", "u", "p"), now).unwrap();
+        session.add(draft("b.com", "u", "p"), now).unwrap();
+        session.lock();
+        // A sync client pushing a stale copy, or a half-restored backup.
+        std::fs::write(&path, &backup).unwrap();
+
+        let opened = session.unlock(&secret(MASTER), now).unwrap();
+
+        assert!(opened.rolled_back);
+    }
+
+    #[test]
+    fn an_older_vault_still_opens() {
+        let dir = TempDir::new().unwrap();
+        let now = Instant::now();
+        let path = dir.path().join("vault.pwm");
+        let mut session = unlocked(&dir, now);
+        let id = session.add(draft("kept.com", "u", "p"), now).unwrap();
+        let backup = std::fs::read(&path).unwrap();
+        session.add(draft("later.com", "u", "p"), now).unwrap();
+        session.lock();
+        std::fs::write(&path, &backup).unwrap();
+
+        session.unlock(&secret(MASTER), now).unwrap();
+
+        // Refusing would lock someone out of credentials they just restored, which is worse
+        // than the attack the check exists to notice. It reports; it does not decide.
+        assert_eq!(session.reveal(id, now).unwrap().site, "kept.com");
+    }
+
+    #[test]
+    fn a_restored_vault_stops_complaining_once_it_is_used() {
+        let dir = TempDir::new().unwrap();
+        let now = Instant::now();
+        let path = dir.path().join("vault.pwm");
+        let mut session = unlocked(&dir, now);
+        let backup = std::fs::read(&path).unwrap();
+        session.add(draft("a.com", "u", "p"), now).unwrap();
+        session.add(draft("b.com", "u", "p"), now).unwrap();
+        session.lock();
+        std::fs::write(&path, &backup).unwrap();
+
+        assert!(session.unlock(&secret(MASTER), now).unwrap().rolled_back);
+        // Saving steps the counter past the highest ever recorded, so the restore repairs
+        // itself rather than warning on every unlock from here on.
+        session.add(draft("c.com", "u", "p"), now).unwrap();
+        session.lock();
+
+        assert!(!session.unlock(&secret(MASTER), now).unwrap().rolled_back);
+    }
+
+    #[test]
+    fn never_writes_the_same_counter_twice() {
+        let dir = TempDir::new().unwrap();
+        let now = Instant::now();
+        let path = dir.path().join("vault.pwm");
+        let mut session = unlocked(&dir, now);
+
+        let mut seen = Vec::new();
+        for site in ["a.com", "b.com", "c.com"] {
+            session.add(draft(site, "u", "p"), now).unwrap();
+            seen.push(read_counter(&std::fs::read(&path).unwrap()).unwrap());
+        }
+
+        // A reused counter would let a later vault pass for an earlier one and vice versa.
+        let mut sorted = seen.clone();
+        sorted.sort_unstable();
+        sorted.dedup();
+        assert_eq!(sorted, seen, "counters must be strictly increasing");
     }
 
     #[test]

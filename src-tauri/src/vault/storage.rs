@@ -11,8 +11,7 @@ use std::path::{Path, PathBuf};
 
 use zeroize::Zeroizing;
 
-use crate::crypto::kdf::KdfParams;
-use crate::vault::format::{decode, encode, encode_with, SealingKey, VaultError};
+use crate::vault::format::{decode, encode_with, SealingKey, VaultError};
 
 #[derive(Debug, thiserror::Error)]
 pub enum StorageError {
@@ -37,28 +36,56 @@ pub fn exists(path: &Path) -> bool {
     path.is_file()
 }
 
-/// Seals `body` and writes it to `path`, replacing any existing vault atomically.
-pub fn save(
-    path: &Path,
-    password: &[u8],
-    body: &[u8],
-    params: KdfParams,
-) -> Result<(), StorageError> {
-    let file = encode(password, body, params)?;
-
-    write_atomically(path, &file)?;
-
-    Ok(())
-}
-
 /// Seals `body` with an already derived key and writes it atomically.
 ///
 /// This is the path an unlocked session takes on every edit: no master password involved, and no
 /// second Argon2 derivation.
-pub fn save_sealed(path: &Path, sealing: &SealingKey, body: &[u8]) -> Result<(), StorageError> {
-    write_atomically(path, &encode_with(sealing, body)?)?;
+pub fn save_sealed(
+    path: &Path,
+    sealing: &SealingKey,
+    counter: u64,
+    body: &[u8],
+) -> Result<(), StorageError> {
+    write_atomically(path, &encode_with(sealing, counter, body)?)?;
+    // Written after the vault, not before. If the process dies in between, the recorded counter
+    // is one behind reality, which reads as "nothing to report" — the safe direction. The other
+    // order would accuse a perfectly good vault of being a rollback.
+    write_highest_seen(path, counter);
 
     Ok(())
+}
+
+/// Where the highest save counter seen so far is recorded.
+fn seen_path(path: &Path) -> PathBuf {
+    let mut name = path.file_name().unwrap_or_default().to_os_string();
+    name.push(".seen");
+    path.with_file_name(name)
+}
+
+/// Records the counter, best effort.
+///
+/// A failure here is not worth failing a save over: the vault itself is already written, and the
+/// only consequence is that a later rollback goes unreported.
+fn write_highest_seen(path: &Path, counter: u64) {
+    // Only ever upwards. It is the *highest* counter seen, not the last one written: lowering it
+    // would let a restored vault quietly erase the evidence that a newer one existed, and the
+    // next rollback would go unreported.
+    if highest_seen(path).is_some_and(|seen| seen >= counter) {
+        return;
+    }
+
+    let _ = create_private(&seen_path(path))
+        .and_then(|mut file| file.write_all(&counter.to_le_bytes()));
+}
+
+/// The highest save counter this installation has recorded, if any.
+///
+/// A missing or unreadable record answers `None` rather than zero. `None` means "no opinion", so
+/// a first run — or a wiped record — reports nothing instead of accusing a valid vault.
+pub fn highest_seen(path: &Path) -> Option<u64> {
+    let bytes = fs::read(seen_path(path)).ok()?;
+
+    Some(u64::from_le_bytes(bytes.get(..8)?.try_into().ok()?))
 }
 
 /// Reads the raw bytes of a vault, for a caller that will derive its own key from the header.
@@ -144,6 +171,9 @@ mod tests {
 
     use tempfile::TempDir;
 
+    use crate::crypto::kdf::KdfParams;
+    use crate::vault::format::FIRST_SAVE;
+
     const PASSWORD: &[u8] = b"correct horse battery staple";
     const BODY: &[u8] = b"[{\"site\":\"github.com\"}]";
 
@@ -155,12 +185,20 @@ mod tests {
         dir.path().join("vault.pwm")
     }
 
+    /// Writes through the same path the application uses. There is no password-based `save`:
+    /// it would write a vault to disk without recording its counter, quietly defeating the
+    /// rollback check for anyone who reached for it.
+    fn save_body(path: &Path, counter: u64, body: &[u8]) {
+        let sealing = SealingKey::create(PASSWORD, cheap()).expect("a sealing key");
+        save_sealed(path, &sealing, counter, body).unwrap();
+    }
+
     #[test]
     fn saves_and_loads_a_body() {
         let dir = TempDir::new().unwrap();
         let path = vault_in(&dir);
 
-        save(&path, PASSWORD, BODY, cheap()).unwrap();
+        save_body(&path, FIRST_SAVE, BODY);
 
         assert_eq!(load(&path, PASSWORD).unwrap().as_slice(), BODY);
     }
@@ -170,8 +208,8 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let path = vault_in(&dir);
 
-        save(&path, PASSWORD, BODY, cheap()).unwrap();
-        save(&path, PASSWORD, b"replaced", cheap()).unwrap();
+        save_body(&path, FIRST_SAVE, BODY);
+        save_body(&path, FIRST_SAVE + 1, b"replaced");
 
         assert_eq!(load(&path, PASSWORD).unwrap().as_slice(), b"replaced");
     }
@@ -181,14 +219,77 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let path = vault_in(&dir);
 
-        save(&path, PASSWORD, BODY, cheap()).unwrap();
+        save_body(&path, FIRST_SAVE, BODY);
 
-        let entries: Vec<_> = std::fs::read_dir(dir.path())
+        let mut entries: Vec<_> = std::fs::read_dir(dir.path())
             .unwrap()
             .map(|entry| entry.unwrap().file_name())
             .collect();
+        entries.sort();
 
-        assert_eq!(entries, vec![path.file_name().unwrap().to_owned()]);
+        // The vault and the counter record. Anything else is a staging file that outlived its
+        // save.
+        assert_eq!(entries, vec!["vault.pwm", "vault.pwm.seen"]);
+    }
+
+    #[test]
+    fn records_the_counter_it_wrote() {
+        let dir = TempDir::new().unwrap();
+        let path = vault_in(&dir);
+
+        save_body(&path, 7, BODY);
+
+        assert_eq!(highest_seen(&path), Some(7));
+    }
+
+    #[test]
+    fn never_lowers_the_record() {
+        let dir = TempDir::new().unwrap();
+        let path = vault_in(&dir);
+
+        save_body(&path, 9, BODY);
+        save_body(&path, 4, BODY);
+
+        // A restored vault saving at a lower counter must not erase the evidence that a newer
+        // one existed, or the next rollback goes unreported.
+        assert_eq!(highest_seen(&path), Some(9));
+    }
+
+    #[test]
+    fn has_no_opinion_before_anything_has_been_saved() {
+        let dir = TempDir::new().unwrap();
+
+        // `None` means "no opinion", not zero. A first run must not accuse a valid vault.
+        assert_eq!(highest_seen(&vault_in(&dir)), None);
+    }
+
+    #[test]
+    fn has_no_opinion_when_the_record_is_unreadable() {
+        let dir = TempDir::new().unwrap();
+        let path = vault_in(&dir);
+        save_body(&path, 7, BODY);
+        std::fs::write(seen_path(&path), b"junk").unwrap();
+
+        // Truncated or corrupt reads as absent rather than as zero, for the same reason.
+        assert_eq!(highest_seen(&path), None);
+    }
+
+    #[test]
+    fn keeps_the_record_readable_only_by_its_owner() {
+        let dir = TempDir::new().unwrap();
+        let path = vault_in(&dir);
+
+        save_body(&path, FIRST_SAVE, BODY);
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = std::fs::metadata(seen_path(&path))
+                .unwrap()
+                .permissions()
+                .mode();
+            assert_eq!(mode & 0o777, 0o600);
+        }
     }
 
     #[test]
@@ -198,7 +299,7 @@ mod tests {
         // What a crash mid-write would leave behind.
         std::fs::write(temp_path(&path), b"garbage from a crashed write").unwrap();
 
-        save(&path, PASSWORD, BODY, cheap()).unwrap();
+        save_body(&path, FIRST_SAVE, BODY);
 
         assert_eq!(load(&path, PASSWORD).unwrap().as_slice(), BODY);
     }
@@ -207,7 +308,7 @@ mod tests {
     fn rejects_a_wrong_password() {
         let dir = TempDir::new().unwrap();
         let path = vault_in(&dir);
-        save(&path, PASSWORD, BODY, cheap()).unwrap();
+        save_body(&path, FIRST_SAVE, BODY);
 
         let error = load(&path, b"wrong").unwrap_err();
 
@@ -245,7 +346,7 @@ mod tests {
         let path = vault_in(&dir);
 
         assert!(!exists(&path));
-        save(&path, PASSWORD, BODY, cheap()).unwrap();
+        save_body(&path, FIRST_SAVE, BODY);
         assert!(exists(&path));
     }
 
@@ -254,7 +355,13 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let path = dir.path().join("nope").join("vault.pwm");
 
-        assert!(save(&path, PASSWORD, BODY, cheap()).is_err());
+        assert!(save_sealed(
+            &path,
+            &SealingKey::create(PASSWORD, cheap()).unwrap(),
+            FIRST_SAVE,
+            BODY
+        )
+        .is_err());
     }
 
     #[cfg(unix)]
@@ -265,7 +372,7 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let path = vault_in(&dir);
 
-        save(&path, PASSWORD, BODY, cheap()).unwrap();
+        save_body(&path, FIRST_SAVE, BODY);
 
         let mode = std::fs::metadata(&path).unwrap().permissions().mode();
 
@@ -282,7 +389,7 @@ mod tests {
         std::fs::write(&path, b"old").unwrap();
         std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).unwrap();
 
-        save(&path, PASSWORD, BODY, cheap()).unwrap();
+        save_body(&path, FIRST_SAVE, BODY);
 
         let mode = std::fs::metadata(&path).unwrap().permissions().mode();
 
@@ -297,7 +404,7 @@ mod tests {
 
         let dir = TempDir::new().unwrap();
         let path = vault_in(&dir);
-        save(&path, PASSWORD, BODY, cheap()).unwrap();
+        save_body(&path, FIRST_SAVE, BODY);
 
         // Staging through a temp file needs to create one, so a directory that forbids creation
         // stops the save before the real vault is touched. Writing straight to the vault would
@@ -307,7 +414,7 @@ mod tests {
         // operation that is not the one under test, so a save that wrongly succeeds cannot be
         // mistaken for running as root.
         let running_as_root = File::create(dir.path().join("probe")).is_ok();
-        let blocked = save(&path, PASSWORD, b"replacement", cheap());
+        let blocked = std::panic::catch_unwind(|| save_body(&path, FIRST_SAVE + 1, b"replacement"));
         std::fs::set_permissions(dir.path(), Permissions::from_mode(0o700)).unwrap();
 
         if running_as_root {

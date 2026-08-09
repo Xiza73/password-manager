@@ -25,6 +25,7 @@ export function VaultGate({ children }: VaultGateProps) {
   const [minimumLength, setMinimumLength] = useState(0);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [rolledBack, setRolledBack] = useState(false);
 
   useEffect(() => {
     let current = true;
@@ -51,6 +52,7 @@ export function VaultGate({ children }: VaultGateProps) {
     // something that no longer exists.
     setScreen('unlock');
     setError('');
+    setRolledBack(false);
   }, []);
 
   useEffect(() => {
@@ -87,7 +89,23 @@ export function VaultGate({ children }: VaultGateProps) {
   if (screen === 'checking') return <p className="panel">Looking for your vault…</p>;
 
   if (screen === 'open') {
-    return <VaultLockContext.Provider value={relock}>{children}</VaultLockContext.Provider>;
+    return (
+      <VaultLockContext.Provider value={relock}>
+        <div className="gate">
+          {rolledBack && (
+            <p className="warning" role="alert">
+              This vault is older than the last one opened on this computer. If you just restored a
+              backup, that is expected and recent changes will be missing. If you did not, some
+              other copy replaced it — check what is in here before trusting it.{' '}
+              <button type="button" onClick={() => setRolledBack(false)}>
+                Dismiss
+              </button>
+            </p>
+          )}
+          {children}
+        </div>
+      </VaultLockContext.Provider>
+    );
   }
 
   if (screen === 'create') {
@@ -103,7 +121,11 @@ export function VaultGate({ children }: VaultGateProps) {
 
   return (
     <UnlockForm
-      onSubmit={(password) => void attempt(() => vault.unlock(password))}
+      onSubmit={(password) =>
+        void attempt(async () => {
+          setRolledBack((await vault.unlock(password)).rolledBack);
+        })
+      }
       error={error}
       busy={busy}
     />

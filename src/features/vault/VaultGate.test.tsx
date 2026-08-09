@@ -27,7 +27,7 @@ beforeEach(() => {
   onVaultLockedMock.mockResolvedValue(unlisten);
   mocked.minimumMasterPasswordLength.mockResolvedValue(12);
   mocked.exists.mockResolvedValue(true);
-  mocked.unlock.mockResolvedValue(undefined);
+  mocked.unlock.mockResolvedValue({ rolledBack: false });
   mocked.create.mockResolvedValue(undefined);
 });
 
@@ -124,6 +124,49 @@ describe('VaultGate', () => {
 
     expect(await screen.findByRole('button', { name: 'Unlock' })).toBeInTheDocument();
     expect(screen.queryByText('the vault is open')).not.toBeInTheDocument();
+  });
+
+  it('says nothing about rollback when the vault is current', async () => {
+    const user = userEvent.setup();
+    renderGate();
+    await screen.findByRole('button', { name: 'Unlock' });
+
+    await user.type(screen.getByLabelText('Master password'), 'a master password');
+    await user.click(screen.getByRole('button', { name: 'Unlock' }));
+    await screen.findByText('the vault is open');
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('warns when the vault is older than the last one opened here', async () => {
+    const user = userEvent.setup();
+    mocked.unlock.mockResolvedValue({ rolledBack: true });
+    renderGate();
+    await screen.findByRole('button', { name: 'Unlock' });
+
+    await user.type(screen.getByLabelText('Master password'), 'a master password');
+    await user.click(screen.getByRole('button', { name: 'Unlock' }));
+
+    // It opens anyway: refusing would lock someone out of a backup they just restored. The
+    // warning names both readings, because the interface cannot tell them apart.
+    expect(await screen.findByText('the vault is open')).toBeInTheDocument();
+    const warning = await screen.findByRole('alert');
+    expect(warning).toHaveTextContent(/older than the last one opened/i);
+    expect(warning).toHaveTextContent(/restored a backup/i);
+  });
+
+  it('lets the rollback warning be dismissed', async () => {
+    const user = userEvent.setup();
+    mocked.unlock.mockResolvedValue({ rolledBack: true });
+    renderGate();
+    await screen.findByRole('button', { name: 'Unlock' });
+    await user.type(screen.getByLabelText('Master password'), 'a master password');
+    await user.click(screen.getByRole('button', { name: 'Unlock' }));
+    await screen.findByRole('alert');
+
+    await user.click(screen.getByRole('button', { name: 'Dismiss' }));
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
   it('stops listening for the lock event when it goes away', async () => {

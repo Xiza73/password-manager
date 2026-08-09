@@ -20,7 +20,15 @@ credentials, generate passwords, copy one to the clipboard, and lock on idle.
 | `src-tauri/src/commands.rs`         | Tauri command surface                             |
 | `src/features/`                     | Unlock screen, credential list, entry form        |
 
-Not done: cloud sync, browser extension, mobile builds, importing from another manager.
+The vault format is version 2. It carries a save counter, and a sibling `vault.pwm.seen` file
+records the highest one this installation has written. Opening a vault with a lower counter is
+reported, not refused — a restored backup looks the same from here, and locking someone out of
+credentials they just restored is the worse mistake. The record is unauthenticated, so anyone
+who can write both files defeats it; what it reliably catches is a stale copy pushed by a sync
+client or a half-restored backup.
+
+Not done: cloud sync, browser extension, mobile builds, importing from another manager,
+changing the master password.
 
 ## Requirements
 
