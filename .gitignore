@@ -1,0 +1,34 @@
+# Claude Code — personal, not shared
+CLAUDE.local.md
+.claude/settings.local.json
+
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+dist-ssr/
+src-tauri/target/
+src-tauri/gen/
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Vault files and key material — never commit
+*.pwm
+*.pwm.tmp
+*.vault
+*.vault.bin
+*.key
+*.pem
+
+# Test and coverage
+coverage/
+.vitest/
+
+# Editor and OS
+.DS_Store
+.idea/
+*.swp
