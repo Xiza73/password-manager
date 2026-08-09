@@ -129,6 +129,27 @@ chore(deps): bump tauri to 2.1
 
 Never add AI attribution or `Co-Authored-By` trailers.
 
+Subject line: 50 characters ideally, 72 hard. Imperative, lowercase, no trailing period.
+
+### Branches
+
+`dev` is the default branch and the one work integrates into. `master` is the released state and
+receives commits from nowhere else.
+
+```
+feat/<slug>  ──PR──▶  dev  ──PR──▶  master
+```
+
+- Branch from `dev`, never from `master`. Prefixes: `feat/`, `fix/`, `chore/`, `docs/`,
+  `refactor/`, `test/`.
+- A feature branch never targets `master`. `master` accepts pull requests from `dev` only, and
+  GitHub enforces that — force pushes and deletions are blocked there.
+- Merge with a merge commit (`gh pr merge --merge --delete-branch`). Never squash: it collapses
+  commits that were split deliberately. Never rebase onto the target: it loses the grouping.
+- `dev` reaching `master` is a release. Tag it `vX.Y.Z` and bump the version in both
+  `package.json` and `src-tauri/tauri.conf.json`.
+- Both test suites and both linters pass before a commit, not before a push.
+
 ## Repository Structure
 
 ```

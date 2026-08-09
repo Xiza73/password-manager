@@ -32,6 +32,9 @@
       "Bash(git log:*)",
       "Bash(git branch:*)",
       "Bash(git add:*)",
+      "Bash(git push:*)",
+      "Bash(gh pr:*)",
+      "Bash(gh repo:*)",
       "Bash(rg:*)",
       "Bash(fd:*)",
       "Bash(bat:*)",
@@ -43,7 +46,6 @@
       "Read(./**/*.vault)",
       "Read(./**/*.key)",
       "Read(./**/*.pem)",
-      "Bash(git push:*)",
       "Bash(rm -rf:*)",
       "Bash(curl:*)",
       "Bash(wget:*)"
