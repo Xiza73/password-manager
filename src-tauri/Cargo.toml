@@ -1,0 +1,70 @@
+[package]
+name = "password-manager"
+version = "0.1.0"
+description = "Local-first desktop password manager"
+authors = ["xiza"]
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+# The `_lib` suffix may seem redundant but it is necessary
+# to make the lib name unique and wouldn't conflict with the bin name.
+# This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
+name = "password_manager_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# `zeroize` is NOT a default feature: without it argon2 leaves the initial hash (derived straight
+# from the password) and the final blockhash in memory after every derivation.
+argon2 = { version = "0.5.3", features = ["zeroize"] }
+# Driven directly rather than through `tauri-plugin-clipboard-manager`, which writes without the
+# exclusion markers that keep a password out of clipboard-history tools. See `src/clipboard.rs`.
+arboard = "3.6"
+# As with argon2, `zeroize` is NOT a default feature here: it wipes the GHASH authentication
+# subkey after use.
+aes-gcm = { version = "0.11.0", features = ["zeroize"] }
+# Not used directly. Declared only to turn on its `zeroize` feature, which puts ZeroizeOnDrop on
+# the expanded AES round keys — they are the master key in another form. aes-gcm does not forward
+# the feature, so enabling it requires naming the crate here.
+aes = { version = "0.9.2", default-features = false, features = ["zeroize"] }
+# `derive` gives us #[derive(Zeroize, ZeroizeOnDrop)] on key-bearing structs.
+zeroize = { version = "1.9.0", features = ["derive"] }
+# `unbiased` makes uniform sampling rejection-based: the password generator must not
+# skew its character distribution through modulo bias.
+rand = { version = "0.10.2", features = ["unbiased"] }
+thiserror = "2.0.19"
+uuid = { version = "1.24.0", features = ["v4", "serde"] }
+
+# Argon2 is expensive by design. Unoptimised, `cargo test` spends almost all of its time inside
+# debug-build BLAKE2 compression, which makes the suite unusable. Only the dependency is
+# optimised — our own crate stays debuggable.
+[profile.dev.package.argon2]
+opt-level = 3
+
+# Profile for the `kdf_timing` example. Release-representative for the crypto path, but without
+# LTO so retuning the KDF does not cost a full optimised rebuild of Tauri.
+[profile.measure]
+inherits = "release"
+lto = false
+strip = false
+debug-assertions = false
+
+[profile.release]
+# Panic messages can carry state. Aborting avoids unwinding through code holding key
+# material, and strip removes symbols that would map the crypto paths for an attacker.
+panic = "abort"
+strip = true
+lto = true
+
+[dev-dependencies]
+tempfile = "3.27.0"
+# `test` gives us tauri::test::{mock_builder, get_ipc_response}, which drive the real invoke
+# handler. Without it the command layer could only be reasoned about, never exercised.
+tauri = { version = "2", features = ["test"] }
