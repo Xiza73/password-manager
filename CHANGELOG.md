@@ -5,6 +5,24 @@ and versions follow [Semantic Versioning](https://semver.org/).
 
 A major version bump means the vault format changed in a way an older build cannot read.
 
+## [0.2.0] — 2026-08-10
+
+### Changed
+
+- **The interface is now a late-nineties desktop application.** Beveled surfaces drawn with
+  inset shadows rather than borders, a title bar, a menu strip, a column list and a status bar.
+  Two palettes: near-black with a gold accent, and the classic teal desktop with a navy title
+  bar. The theme follows the operating system until you pick one from the menu strip, and is
+  remembered after that.
+- Form labels carry trailing colons, and the credential list is laid out in columns rather than
+  as a stack of cards.
+
+### Notes
+
+Presentation only. The vault format is unchanged at version 2, so vaults written by 0.1.0 open
+without migration. The list still carries no passwords — the reference design showed them inline
+in the table, and that is exactly what the listing type exists to prevent.
+
 ## [0.1.0] — 2026-08-09
 
 First release. Everything in the agreed scope works; nothing is signed yet.
@@ -51,4 +69,5 @@ First release. Everything in the agreed scope works; nothing is signed yet.
 - The master password unavoidably exists in unwiped memory in the WebView and in the IPC
   payload. It is never stored, never logged, and discarded as soon as the key is derived.
 
+[0.2.0]: https://github.com/Xiza73/password-manager/releases/tag/v0.2.0
 [0.1.0]: https://github.com/Xiza73/password-manager/releases/tag/v0.1.0
