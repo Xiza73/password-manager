@@ -1,3 +1,13 @@
+// Not run on Windows. The test binary dies at load time with STATUS_ENTRYPOINT_NOT_FOUND before
+// a single test starts — an export mismatch inside Tauri's mock runtime, not a missing file:
+// CI confirmed `target/debug` contains no DLLs at all, so there is nothing to put on PATH.
+//
+// What is lost is nothing platform-specific. This file checks command names, argument shapes and
+// error codes, all of it Rust with no `cfg` branch in sight, and Linux and macOS run every one of
+// them. The Windows-only code — `create_private`, `sync_parent_directory`, the clipboard
+// exclusion — lives in the library, whose 133 tests do run on Windows.
+#![cfg(not(windows))]
+
 //! Drives the command layer through Tauri's real invoke handler.
 //!
 //! The session underneath is covered by its own unit tests, and the adapters in `commands.rs`

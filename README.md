@@ -49,6 +49,11 @@ so create the release first and the workflow attaches the binaries afterwards:
 It refuses to build if the tag and the three manifests disagree about the version, and refuses to
 publish if a platform produced no installer. A combined `SHA256SUMS.txt` covers every file.
 
+One gap worth knowing: `tests/ipc_commands.rs` does not run on Windows. Its binary dies at load
+time inside Tauri's mock runtime, and what it covers — command names, argument shapes, error
+codes — has no platform-specific branch in it, so Linux and macOS cover it fully. The Windows-only
+code lives in the library, whose tests do run there.
+
 What CI does **not** solve is signing. Every binary it produces is unsigned, so macOS and Windows
 will warn before opening one, and nothing ties a download to this repository beyond the checksum.
 
