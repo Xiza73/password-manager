@@ -1,0 +1,142 @@
+name: release
+
+# Fires when a release is published rather than when a tag is pushed. The notes are written by
+# hand and matter — leading with what is unsigned and what cannot be recovered — so the release
+# is created first and this fills in the binaries afterwards.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Tag to build and attach binaries to
+        required: true
+
+permissions:
+  contents: write
+
+env:
+  TAG: ${{ github.event.release.tag_name || inputs.tag }}
+
+jobs:
+  bundle:
+    name: bundle (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # One universal binary rather than two downloads. Building on the runner's own
+          # architecture would ship Apple Silicon only, which is what 0.1.0 through 0.3.0 did.
+          - os: macos-latest
+            args: --target universal-apple-darwin
+            rust-targets: aarch64-apple-darwin,x86_64-apple-darwin
+          - os: ubuntu-22.04
+            args: ''
+            rust-targets: ''
+          - os: windows-latest
+            args: ''
+            rust-targets: ''
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name || inputs.tag }}
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libxdo-dev \
+            libssl-dev \
+            libxcb1-dev \
+            libxcb-render0-dev \
+            libxcb-shape0-dev \
+            libxcb-xfixes0-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust-targets }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # A binary claiming one version while the manifests say another is worse than no binary.
+      - name: Check the tag matches the manifests
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected="${TAG#v}"
+          for file in package.json src-tauri/tauri.conf.json; do
+            found=$(node -p "require('./$file').version")
+            [ "$found" = "$expected" ] || {
+              echo "$file says $found, tag says $expected"; exit 1;
+            }
+          done
+          found=$(grep -m1 '^version' src-tauri/Cargo.toml | cut -d'"' -f2)
+          [ "$found" = "$expected" ] || {
+            echo "Cargo.toml says $found, tag says $expected"; exit 1;
+          }
+          echo "all manifests agree on $expected"
+
+      - run: npm run tauri build -- ${{ matrix.args }}
+
+      - name: Collect installers
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          find src-tauri/target -path '*/bundle/*' -type f \
+            \( -name '*.dmg' -o -name '*.msi' -o -name '*-setup.exe' \
+               -o -name '*.deb' -o -name '*.rpm' -o -name '*.AppImage' \) \
+            -exec cp {} artifacts/ \;
+          ls -l artifacts
+          # An empty upload would publish a release with nothing attached and no complaint.
+          [ "$(ls -A artifacts)" ] || { echo "no installers were produced"; exit 1; }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installers-${{ matrix.os }}
+          path: artifacts/*
+          if-no-files-found: error
+
+  publish:
+    name: publish
+    needs: bundle
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: downloaded
+          merge-multiple: true
+
+      # One list covering every platform, so a single command verifies whichever file was taken.
+      - name: Checksum
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd downloaded
+          # `sha256sum` ships on the Linux runner; `shasum -a 256` does not always. The output
+          # format is the same either way, so `shasum -a 256 -c` verifies it on a Mac.
+          sha256sum * > SHA256SUMS.txt
+          sha256sum -c SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Attach to the release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "$TAG" downloaded/* --clobber --repo "$GITHUB_REPOSITORY"
