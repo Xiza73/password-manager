@@ -14,7 +14,7 @@ describe('UnlockForm', () => {
     const user = userEvent.setup();
     const { onSubmit } = renderForm();
 
-    await user.type(screen.getByLabelText('Master password'), 'a master password');
+    await user.type(screen.getByLabelText('Master password:'), 'a master password');
     await user.click(screen.getByRole('button', { name: 'Unlock' }));
 
     expect(onSubmit).toHaveBeenCalledWith('a master password');
@@ -24,12 +24,12 @@ describe('UnlockForm', () => {
     renderForm();
 
     // Not a detail: the vault is opened in rooms with other people in them.
-    expect(screen.getByLabelText('Master password')).toHaveAttribute('type', 'password');
+    expect(screen.getByLabelText('Master password:')).toHaveAttribute('type', 'password');
   });
 
   it('keeps the field out of autofill and spellcheck', () => {
     renderForm();
-    const field = screen.getByLabelText('Master password');
+    const field = screen.getByLabelText('Master password:');
 
     // Both would copy the master password somewhere this application cannot reach to erase.
     expect(field).toHaveAttribute('autocomplete', 'off');
@@ -57,10 +57,10 @@ describe('UnlockForm', () => {
     const user = userEvent.setup();
     const { onSubmit } = renderForm({ error: 'That master password did not open this vault.' });
 
-    await user.type(screen.getByLabelText('Master password'), 'a master password');
+    await user.type(screen.getByLabelText('Master password:'), 'a master password');
 
     // Clearing it would mean retyping a passphrase every time a finger slips.
-    expect(screen.getByLabelText('Master password')).toHaveValue('a master password');
+    expect(screen.getByLabelText('Master password:')).toHaveValue('a master password');
     expect(onSubmit).not.toHaveBeenCalled();
   });
 
@@ -68,7 +68,7 @@ describe('UnlockForm', () => {
     const user = userEvent.setup();
     const { onSubmit } = renderForm({ busy: true });
 
-    await user.type(screen.getByLabelText('Master password'), 'a master password');
+    await user.type(screen.getByLabelText('Master password:'), 'a master password');
     await user.click(screen.getByRole('button', { name: 'Unlocking…' }));
 
     // Unlocking costs a fifth of a second of Argon2; without this the button invites a queue.

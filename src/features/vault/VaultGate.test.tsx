@@ -66,7 +66,7 @@ describe('VaultGate', () => {
     renderGate();
     await screen.findByRole('button', { name: 'Unlock' });
 
-    await user.type(screen.getByLabelText('Master password'), 'a master password');
+    await user.type(screen.getByLabelText('Master password:'), 'a master password');
     await user.click(screen.getByRole('button', { name: 'Unlock' }));
 
     expect(await screen.findByText('the vault is open')).toBeInTheDocument();
@@ -79,7 +79,7 @@ describe('VaultGate', () => {
     renderGate();
     await screen.findByRole('button', { name: 'Unlock' });
 
-    await user.type(screen.getByLabelText('Master password'), 'wrong');
+    await user.type(screen.getByLabelText('Master password:'), 'wrong');
     await user.click(screen.getByRole('button', { name: 'Unlock' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
@@ -94,8 +94,8 @@ describe('VaultGate', () => {
     renderGate();
     await screen.findByRole('button', { name: 'Create vault' });
 
-    await user.type(screen.getByLabelText('Master password'), 'a long enough password');
-    await user.type(screen.getByLabelText('Repeat master password'), 'a long enough password');
+    await user.type(screen.getByLabelText('Master password:'), 'a long enough password');
+    await user.type(screen.getByLabelText('Repeat master password:'), 'a long enough password');
     await user.click(screen.getByRole('button', { name: 'Create vault' }));
 
     expect(await screen.findByText('the vault is open')).toBeInTheDocument();
@@ -114,7 +114,7 @@ describe('VaultGate', () => {
     const user = userEvent.setup();
     renderGate();
     await screen.findByRole('button', { name: 'Unlock' });
-    await user.type(screen.getByLabelText('Master password'), 'a master password');
+    await user.type(screen.getByLabelText('Master password:'), 'a master password');
     await user.click(screen.getByRole('button', { name: 'Unlock' }));
     await screen.findByText('the vault is open');
 
@@ -131,7 +131,7 @@ describe('VaultGate', () => {
     renderGate();
     await screen.findByRole('button', { name: 'Unlock' });
 
-    await user.type(screen.getByLabelText('Master password'), 'a master password');
+    await user.type(screen.getByLabelText('Master password:'), 'a master password');
     await user.click(screen.getByRole('button', { name: 'Unlock' }));
     await screen.findByText('the vault is open');
 
@@ -144,7 +144,7 @@ describe('VaultGate', () => {
     renderGate();
     await screen.findByRole('button', { name: 'Unlock' });
 
-    await user.type(screen.getByLabelText('Master password'), 'a master password');
+    await user.type(screen.getByLabelText('Master password:'), 'a master password');
     await user.click(screen.getByRole('button', { name: 'Unlock' }));
 
     // It opens anyway: refusing would lock someone out of a backup they just restored. The
@@ -160,7 +160,7 @@ describe('VaultGate', () => {
     mocked.unlock.mockResolvedValue({ rolledBack: true });
     renderGate();
     await screen.findByRole('button', { name: 'Unlock' });
-    await user.type(screen.getByLabelText('Master password'), 'a master password');
+    await user.type(screen.getByLabelText('Master password:'), 'a master password');
     await user.click(screen.getByRole('button', { name: 'Unlock' }));
     await screen.findByRole('alert');
 

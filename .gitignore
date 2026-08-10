@@ -6,6 +6,9 @@ CLAUDE.local.md
 # working tree and a noisy diff for a file nobody edits.
 .atl/
 
+# Design references. Kept locally, not part of the project.
+design/
+
 # Dependencies
 node_modules/
 

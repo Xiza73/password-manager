@@ -23,6 +23,8 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src", "vitest.config.ts", "vitest.setup.ts"],
+  // `vitest.config.ts` lives in tsconfig.node.json: it is Node code, and typing it
+  // against the browser lib is what made `node:fs` unresolvable.
+  "include": ["src", "vitest.setup.ts"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

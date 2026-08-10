@@ -61,7 +61,7 @@ export function PasswordGenerator({ onUse }: PasswordGeneratorProps) {
       <h3>Generate a password</h3>
 
       <div className="generator__options">
-        <label htmlFor="generator-length">Length</label>
+        <label htmlFor="generator-length">Length:</label>
         <input
           id="generator-length"
           type="number"

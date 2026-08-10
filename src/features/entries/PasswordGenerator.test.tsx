@@ -59,8 +59,8 @@ describe('PasswordGenerator', () => {
 
     await user.click(screen.getByLabelText('Symbols'));
     await user.click(screen.getByLabelText('Avoid look-alike characters'));
-    await user.clear(screen.getByLabelText('Length'));
-    await user.type(screen.getByLabelText('Length'), '32');
+    await user.clear(screen.getByLabelText('Length:'));
+    await user.type(screen.getByLabelText('Length:'), '32');
     await user.click(screen.getByRole('button', { name: 'Generate' }));
 
     await waitFor(() =>
