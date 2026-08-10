@@ -5,7 +5,10 @@ and versions follow [Semantic Versioning](https://semver.org/).
 
 A major version bump means the vault format changed in a way an older build cannot read.
 
-## [Unreleased]
+## [0.4.1] — 2026-08-10
+
+Nothing in the application changed. The installers behave exactly as 0.4.0's do; what this
+release proves is that a release now publishes checksums that verify.
 
 ### Fixed
 
@@ -16,6 +19,12 @@ A major version bump means the vault format changed in a way an older build cann
   the rename, where the names still agreed. The release now strips the spaces before hashing, and
   fails outright if a space survives into the list. The 0.4.0 checksums have been replaced; the
   binaries were never affected and their hashes are unchanged.
+
+### Added
+
+- Screenshots in the README: the unlock screen and an open vault, one per palette. They are
+  taken from the real components with invented credentials behind a stubbed IPC layer. They
+  carry the 0.4.0 title bar, which is the version they were captured against.
 
 ## [0.4.0] — 2026-08-10
 
@@ -127,6 +136,7 @@ First release. Everything in the agreed scope works; nothing is signed yet.
 - The master password unavoidably exists in unwiped memory in the WebView and in the IPC
   payload. It is never stored, never logged, and discarded as soon as the key is derived.
 
+[0.4.1]: https://github.com/Xiza73/password-manager/releases/tag/v0.4.1
 [0.4.0]: https://github.com/Xiza73/password-manager/releases/tag/v0.4.0
 [0.3.0]: https://github.com/Xiza73/password-manager/releases/tag/v0.3.0
 [0.2.0]: https://github.com/Xiza73/password-manager/releases/tag/v0.2.0
