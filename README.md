@@ -5,6 +5,23 @@ no account, no server, no sync.
 
 Built with [Tauri v2](https://v2.tauri.app) (Rust core) and React + TypeScript.
 
+## What it looks like
+
+![The unlock screen in the light palette: one master password field under the heading "Enter your
+master password", and a note that the vault locks itself after five minutes of
+inactivity.](docs/screenshots/unlock.png)
+
+![The open vault in the dark palette: six credentials listed by service and user on the left, with
+github.com selected on the right. Its password and notes are shown as dots behind "Show
+password".](docs/screenshots/vault.png)
+
+Both palettes follow the operating system until you pick one.
+
+The credentials above are invented. Note what the second screenshot does _not_ show: opening an
+entry does not put its password on screen. Revealing it is a separate, deliberate action, because
+the first one happens in rooms with other people in them — and the notes are masked alongside it,
+since recovery codes and backup keys are what people put there.
+
 ## Status
 
 The first release scope is complete: create and unlock a vault, add, edit, search and delete

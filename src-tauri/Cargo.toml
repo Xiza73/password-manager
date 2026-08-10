@@ -1,6 +1,6 @@
 [package]
 name = "password-manager"
-version = "0.4.0"
+version = "0.4.1"
 description = "Local-first desktop password manager"
 authors = ["xiza"]
 edition = "2021"
