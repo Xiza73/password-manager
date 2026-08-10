@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { WindowFrame } from './WindowFrame';
@@ -45,16 +45,21 @@ describe('WindowFrame', () => {
     expect(__APP_VERSION__).toMatch(/^\d+\.\d+\.\d+$/);
   });
 
-  it('hides the decorative chrome from assistive technology', () => {
+  it('carries no control that does nothing', () => {
     render(
       <WindowFrame subtitle="vault locked">
         <p>contents</p>
       </WindowFrame>
     );
 
-    // The minimise, maximise and close boxes are skin: the real window controls belong to the
-    // operating system. Exposing them as buttons would promise something they do not do.
-    expect(screen.queryByRole('button', { name: /close|minimi|maximi/i })).not.toBeInTheDocument();
+    // The reference had minimise, maximise and close boxes plus a File / Edit / Vault / Help
+    // menu, all decoration. The operating system already frames the window and the menus were
+    // never wired to anything, so they are gone rather than pretending.
+    expect(within(screen.getByRole('banner')).queryAllByRole('button')).toHaveLength(0);
+    expect(screen.queryByText(/^(File|Edit|Vault|Help)$/)).not.toBeInTheDocument();
+
+    // The theme toggle is the one control the frame owns, and it works.
+    expect(screen.getByRole('button', { name: /theme/i })).toBeInTheDocument();
   });
 
   it('toggles between the two palettes', async () => {
