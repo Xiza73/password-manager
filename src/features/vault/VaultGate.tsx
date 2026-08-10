@@ -3,6 +3,8 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { errorMessage } from '../../lib/errorMessage';
 import { onVaultLocked, vault } from '../../lib/ipc';
 
+import { WindowFrame } from '../../components/WindowFrame';
+
 import { CreateVaultForm } from './CreateVaultForm';
 import { UnlockForm } from './UnlockForm';
 import { VaultLockContext } from './VaultLockContext';
@@ -86,12 +88,18 @@ export function VaultGate({ children }: VaultGateProps) {
     }
   }, []);
 
-  if (screen === 'checking') return <p className="panel">Looking for your vault…</p>;
+  if (screen === 'checking') {
+    return (
+      <WindowFrame subtitle="starting">
+        <p className="panel">Looking for your vault…</p>
+      </WindowFrame>
+    );
+  }
 
   if (screen === 'open') {
     return (
       <VaultLockContext.Provider value={relock}>
-        <div className="gate">
+        <WindowFrame subtitle="vault open">
           {rolledBack && (
             <p className="warning" role="alert">
               This vault is older than the last one opened on this computer. If you just restored a
@@ -103,31 +111,35 @@ export function VaultGate({ children }: VaultGateProps) {
             </p>
           )}
           {children}
-        </div>
+        </WindowFrame>
       </VaultLockContext.Provider>
     );
   }
 
   if (screen === 'create') {
     return (
-      <CreateVaultForm
-        minimumLength={minimumLength}
-        onSubmit={(password) => void attempt(() => vault.create(password))}
-        error={error}
-        busy={busy}
-      />
+      <WindowFrame subtitle="no vault yet">
+        <CreateVaultForm
+          minimumLength={minimumLength}
+          onSubmit={(password) => void attempt(() => vault.create(password))}
+          error={error}
+          busy={busy}
+        />
+      </WindowFrame>
     );
   }
 
   return (
-    <UnlockForm
-      onSubmit={(password) =>
-        void attempt(async () => {
-          setRolledBack((await vault.unlock(password)).rolledBack);
-        })
-      }
-      error={error}
-      busy={busy}
-    />
+    <WindowFrame subtitle="vault locked">
+      <UnlockForm
+        onSubmit={(password) =>
+          void attempt(async () => {
+            setRolledBack((await vault.unlock(password)).rolledBack);
+          })
+        }
+        error={error}
+        busy={busy}
+      />
+    </WindowFrame>
   );
 }

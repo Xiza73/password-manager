@@ -47,7 +47,7 @@ export function EntryDetail({
 
       <p className="entry-detail__username">{credential.username || '—'}</p>
 
-      <label htmlFor="detail-password">Password</label>
+      <label htmlFor="detail-password">Password:</label>
       <div className="entry-detail__secret">
         <input
           id="detail-password"
@@ -75,7 +75,7 @@ export function EntryDetail({
         </p>
       )}
 
-      <label htmlFor="detail-notes">Notes</label>
+      <label htmlFor="detail-notes">Notes:</label>
       <textarea
         id="detail-notes"
         // Recovery codes and backup keys end up in notes, so they are masked with the password

@@ -12,8 +12,8 @@ function renderForm(props: Partial<React.ComponentProps<typeof CreateVaultForm>>
 }
 
 async function fill(user: ReturnType<typeof userEvent.setup>, password: string, repeat = password) {
-  await user.type(screen.getByLabelText('Master password'), password);
-  await user.type(screen.getByLabelText('Repeat master password'), repeat);
+  await user.type(screen.getByLabelText('Master password:'), password);
+  await user.type(screen.getByLabelText('Repeat master password:'), repeat);
 }
 
 describe('CreateVaultForm', () => {
@@ -78,8 +78,8 @@ describe('CreateVaultForm', () => {
   it('hides both fields', () => {
     renderForm();
 
-    expect(screen.getByLabelText('Master password')).toHaveAttribute('type', 'password');
-    expect(screen.getByLabelText('Repeat master password')).toHaveAttribute('type', 'password');
+    expect(screen.getByLabelText('Master password:')).toHaveAttribute('type', 'password');
+    expect(screen.getByLabelText('Repeat master password:')).toHaveAttribute('type', 'password');
   });
 
   it('shows an error from the Rust side', () => {

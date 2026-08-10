@@ -153,7 +153,7 @@ export function EntriesScreen() {
 
   if (mode === 'adding' || mode === 'editing') {
     return (
-      <div className="panel">
+      <div className="vault">
         <EntryForm
           onSubmit={(draft) => void save(draft)}
           onCancel={() => setMode('browsing')}
@@ -176,12 +176,9 @@ export function EntriesScreen() {
 
   return (
     <div className="vault">
-      <header className="vault__header">
-        <h1>Your vault</h1>
-        <button type="button" onClick={() => void lock()}>
-          Lock
-        </button>
-      </header>
+      {/* The window title bar carries the name visually; this keeps a heading in the document
+          outline for anyone navigating by structure. */}
+      <h1 className="visually-hidden">Your vault</h1>
 
       {error && (
         <p className="error" role="alert">
@@ -212,6 +209,16 @@ export function EntriesScreen() {
             copied={copied}
           />
         )}
+      </div>
+
+      <div className="window__status">
+        <span>{selected ? selected.site : 'Vault open. Select an entry.'}</span>
+        <span>
+          {entries.length} {entries.length === 1 ? 'entry' : 'entries'}
+        </span>
+        <button type="button" className="bevel window__status-lock" onClick={() => void lock()}>
+          Lock
+        </button>
       </div>
     </div>
   );

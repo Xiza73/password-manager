@@ -49,7 +49,7 @@ export function EntryForm({ onSubmit, onCancel, initial, error, busy = false }: 
     <form className="entry-form" onSubmit={handleSubmit}>
       <h2>{initial ? 'Edit credential' : 'New credential'}</h2>
 
-      <label htmlFor="entry-site">Site</label>
+      <label htmlFor="entry-site">Site:</label>
       <input
         id="entry-site"
         value={draft.site}
@@ -59,7 +59,7 @@ export function EntryForm({ onSubmit, onCancel, initial, error, busy = false }: 
         disabled={busy}
       />
 
-      <label htmlFor="entry-username">Username</label>
+      <label htmlFor="entry-username">Username:</label>
       <input
         id="entry-username"
         value={draft.username}
@@ -68,7 +68,7 @@ export function EntryForm({ onSubmit, onCancel, initial, error, busy = false }: 
         disabled={busy}
       />
 
-      <label htmlFor="entry-password">Password</label>
+      <label htmlFor="entry-password">Password:</label>
       <div className="entry-form__secret">
         <input
           id="entry-password"
@@ -93,7 +93,7 @@ export function EntryForm({ onSubmit, onCancel, initial, error, busy = false }: 
         }}
       />
 
-      <label htmlFor="entry-notes">Notes</label>
+      <label htmlFor="entry-notes">Notes:</label>
       <textarea
         id="entry-notes"
         value={draft.notes}

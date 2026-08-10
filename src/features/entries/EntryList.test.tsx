@@ -41,7 +41,7 @@ describe('EntryList', () => {
     const user = userEvent.setup();
     const { onQueryChange } = renderList({ query: 'gi' });
 
-    await user.type(screen.getByRole('searchbox', { name: 'Search' }), 't');
+    await user.type(screen.getByRole('searchbox', { name: 'Search:' }), 't');
 
     // The input is controlled and this component keeps no state, so it reports the new value
     // and lets the container decide. Accumulating a query is the container's test, not this one.
@@ -52,7 +52,7 @@ describe('EntryList', () => {
     const user = userEvent.setup();
     const { onAdd } = renderList();
 
-    await user.click(screen.getByRole('button', { name: 'Add credential' }));
+    await user.click(screen.getByRole('button', { name: 'New entry' }));
 
     expect(onAdd).toHaveBeenCalled();
   });

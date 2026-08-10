@@ -70,7 +70,7 @@ describe('EntriesScreen', () => {
     renderScreen();
     await screen.findByRole('button', { name: /github\.com/ });
 
-    await user.type(screen.getByRole('searchbox', { name: 'Search' }), 'lab');
+    await user.type(screen.getByRole('searchbox', { name: 'Search:' }), 'lab');
 
     // Searching in the interface would mean holding the whole vault to search it.
     await waitFor(() => expect(mocked.list).toHaveBeenCalledWith('lab'));
@@ -99,7 +99,7 @@ describe('EntriesScreen', () => {
     await user.click(screen.getByRole('button', { name: 'Close' }));
 
     // Reopening has to ask Rust again, which is the observable proof it was not kept.
-    expect(screen.queryByLabelText('Password')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Password:')).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: /github\.com/ }));
     await waitFor(() => expect(mocked.reveal).toHaveBeenCalledTimes(2));
   });
@@ -107,10 +107,10 @@ describe('EntriesScreen', () => {
   it('adds a credential and refreshes the list', async () => {
     const user = userEvent.setup();
     renderScreen();
-    await screen.findByRole('button', { name: 'Add credential' });
+    await screen.findByRole('button', { name: 'New entry' });
 
-    await user.click(screen.getByRole('button', { name: 'Add credential' }));
-    await user.type(screen.getByLabelText('Site'), 'example.com');
+    await user.click(screen.getByRole('button', { name: 'New entry' }));
+    await user.type(screen.getByLabelText('Site:'), 'example.com');
     await user.click(screen.getByRole('button', { name: 'Save' }));
 
     await waitFor(() =>
@@ -132,8 +132,8 @@ describe('EntriesScreen', () => {
     await screen.findByRole('heading', { name: 'github.com' });
 
     await user.click(screen.getByRole('button', { name: 'Edit' }));
-    await user.clear(screen.getByLabelText('Password'));
-    await user.type(screen.getByLabelText('Password'), 'rotated');
+    await user.clear(screen.getByLabelText('Password:'));
+    await user.type(screen.getByLabelText('Password:'), 'rotated');
     await user.click(screen.getByRole('button', { name: 'Save' }));
 
     await waitFor(() =>
@@ -157,7 +157,7 @@ describe('EntriesScreen', () => {
     await user.click(screen.getByRole('button', { name: 'Delete permanently' }));
 
     await waitFor(() => expect(mocked.remove).toHaveBeenCalledWith('a'));
-    expect(screen.queryByLabelText('Password')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Password:')).not.toBeInTheDocument();
   });
 
   it('copies a password without ever receiving it', async () => {
