@@ -5,6 +5,27 @@ and versions follow [Semantic Versioning](https://semver.org/).
 
 A major version bump means the vault format changed in a way an older build cannot read.
 
+## [0.3.0] — 2026-08-10
+
+### Changed
+
+- **The application fills the window.** No desktop backdrop behind it, and with nothing behind
+  it the outer bevel and drop shadow went too. The body scrolls rather than the page, so the
+  title bar stays put; the credential list takes the height it is given instead of stopping at a
+  fixed cap.
+
+### Removed
+
+- **The window controls and the File / Edit / Vault / Help menu.** They came from the reference
+  design and were never wired to anything. A Tauri window is already framed by the operating
+  system, and chrome that looks like a control and answers to nothing is a small lie repeated on
+  every screen. The strip that held the menu keeps the theme toggle, which works.
+
+### Notes
+
+Presentation only. No Rust changed at all, and the vault format stays at version 2, so vaults
+written by 0.1.0 and 0.2.0 open without migration.
+
 ## [0.2.0] — 2026-08-10
 
 ### Changed
@@ -69,5 +90,6 @@ First release. Everything in the agreed scope works; nothing is signed yet.
 - The master password unavoidably exists in unwiped memory in the WebView and in the IPC
   payload. It is never stored, never logged, and discarded as soon as the key is derived.
 
+[0.3.0]: https://github.com/Xiza73/password-manager/releases/tag/v0.3.0
 [0.2.0]: https://github.com/Xiza73/password-manager/releases/tag/v0.2.0
 [0.1.0]: https://github.com/Xiza73/password-manager/releases/tag/v0.1.0
