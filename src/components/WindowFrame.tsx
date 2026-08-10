@@ -37,7 +37,7 @@ export function WindowFrame({ subtitle, children }: WindowFrameProps) {
       <header className="window__title" role="banner">
         <span className="window__icon" aria-hidden="true" />
         <span className="window__name">
-          Password Manager 0.1.0 — <span className="window__subtitle">{subtitle}</span>
+          Password Manager {__APP_VERSION__} — <span className="window__subtitle">{subtitle}</span>
         </span>
         <span className="window__controls" aria-hidden="true">
           <span className="window__control window__control--minimise" />

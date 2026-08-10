@@ -30,6 +30,21 @@ describe('WindowFrame', () => {
     expect(screen.getByRole('banner')).toHaveTextContent('vault locked');
   });
 
+  it('shows the version the build was made from', () => {
+    render(
+      <WindowFrame subtitle="vault locked">
+        <p>contents</p>
+      </WindowFrame>
+    );
+
+    // Injected from package.json at build time. Hardcoding it here is how the title bar ends up
+    // claiming a version the manifests stopped agreeing with two releases ago.
+    expect(screen.getByRole('banner')).toHaveTextContent(
+      new RegExp(`Password Manager ${__APP_VERSION__}\\b`)
+    );
+    expect(__APP_VERSION__).toMatch(/^\d+\.\d+\.\d+$/);
+  });
+
   it('hides the decorative chrome from assistive technology', () => {
     render(
       <WindowFrame subtitle="vault locked">
