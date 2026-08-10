@@ -9,12 +9,12 @@ interface WindowFrameProps {
 }
 
 /**
- * The application window: title bar, menu strip, and the panel everything else sits in.
+ * The application frame: a title bar, a strip of controls, and the area everything else fills.
  *
- * The minimise, maximise and close boxes and the menu labels are decoration. A Tauri window is
- * already framed by the operating system, and controls that look real but do nothing are worse
- * than no controls — so they are hidden from assistive technology rather than dressed up as
- * buttons. The theme toggle is the one control in the strip that does something.
+ * The reference design put minimise, maximise and close boxes in the title bar and a
+ * File / Edit / Vault / Help menu below it. Neither survived: a Tauri window is already framed by
+ * the operating system, and the menus were never wired to anything. Chrome that looks like a
+ * control and answers to nothing is a small lie repeated on every screen.
  */
 export function WindowFrame({ subtitle, children }: WindowFrameProps) {
   const [theme, setTheme] = useState<Theme>(() => {
@@ -39,27 +39,10 @@ export function WindowFrame({ subtitle, children }: WindowFrameProps) {
         <span className="window__name">
           Password Manager {__APP_VERSION__} — <span className="window__subtitle">{subtitle}</span>
         </span>
-        <span className="window__controls" aria-hidden="true">
-          <span className="window__control window__control--minimise" />
-          <span className="window__control window__control--maximise" />
-          <span className="window__control window__control--close">×</span>
-        </span>
       </header>
 
-      <div className="window__menu">
-        <span aria-hidden="true" className="window__menu-item window__menu-item--first">
-          File
-        </span>
-        <span aria-hidden="true" className="window__menu-item">
-          Edit
-        </span>
-        <span aria-hidden="true" className="window__menu-item">
-          Vault
-        </span>
-        <span aria-hidden="true" className="window__menu-item">
-          Help
-        </span>
-        <span className="window__menu-spacer" />
+      <div className="window__strip">
+        <span className="window__strip-spacer" />
         <button type="button" className="bevel window__theme" onClick={toggle}>
           Theme: {theme === 'dark' ? 'Night' : 'Day'}
         </button>

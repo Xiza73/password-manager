@@ -18,7 +18,6 @@
      policy and runs offline, so a remote font would simply fail to load. */
   --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, 'DejaVu Sans Mono', monospace;
 
-  --desk: linear-gradient(#121211, #080807);
   --face: #33322d;
   --hi: #5e5d55;
   --hi2: #4a4942;
@@ -43,8 +42,6 @@
 }
 
 :root[data-theme='light'] {
-  /* The teal desktop is the single most recognisable thing about the era. */
-  --desk: linear-gradient(#0e6a6a, #0b5757);
   --face: #d6d3cc;
   --hi: #ffffff;
   --hi2: #efeee9;
@@ -79,12 +76,13 @@ body {
   color: var(--text);
 }
 
+/* The application fills the screen. There is no desktop behind it to show, so the window has no
+   outer bevel, no drop shadow and no margin — and the reference's teal desk went with them. */
 .app {
   display: flex;
-  justify-content: center;
+  flex-direction: column;
   min-height: 100vh;
-  padding: 48px 24px;
-  background: var(--desk);
+  background: var(--face);
 }
 
 /* ── the two bevels everything is built from ─────────────────────────────── */
@@ -123,20 +121,13 @@ textarea,
 /* ── the window ──────────────────────────────────────────────────────────── */
 
 .window {
-  /* `margin: auto` rather than `align-items: center` on the parent: centring a flex item that
-     way clips its top once the content is taller than the viewport, and the clipped part cannot
-     be scrolled back into view. */
-  margin: auto;
-  width: 860px;
-  max-width: 100%;
-  padding: 3px;
+  display: flex;
+  flex-direction: column;
+  /* `min-height: 0` so the body may shrink below its content and scroll, instead of pushing the
+     title bar off the top of the screen. */
+  flex: 1;
+  min-height: 0;
   background: var(--face);
-  box-shadow:
-    inset -1px -1px 0 var(--lo),
-    inset 1px 1px 0 var(--hi),
-    inset -2px -2px 0 var(--mid),
-    inset 2px 2px 0 var(--hi2),
-    4px 4px 0 rgb(0 0 0 / 35%);
 }
 
 .window__title {
@@ -183,63 +174,16 @@ textarea,
   font-weight: normal;
 }
 
-.window__controls {
-  display: flex;
-  gap: 2px;
-}
-
-.window__control {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 16px;
-  background: var(--face);
-  color: var(--text);
-  font-size: 11px;
-  line-height: 1;
-  box-shadow:
-    inset -1px -1px 0 var(--lo),
-    inset 1px 1px 0 var(--hi),
-    inset -2px -2px 0 var(--mid),
-    inset 2px 2px 0 var(--hi2);
-}
-
-.window__control--minimise {
-  align-items: flex-end;
-  padding-bottom: 3px;
-}
-
-.window__control--minimise::after {
-  content: '';
-  width: 8px;
-  height: 2px;
-  background: var(--text);
-}
-
-.window__control--maximise::after {
-  content: '';
-  width: 9px;
-  height: 8px;
-  border: 1px solid var(--text);
-  border-top-width: 2px;
-}
-
-.window__menu {
+.window__strip {
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 3px 4px 3px 6px;
+  padding: 3px 6px;
   border-bottom: 1px solid var(--mid);
   color: var(--text);
 }
 
-.window__menu-item--first {
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
-
-.window__menu-spacer {
+.window__strip-spacer {
   flex: 1;
 }
 
@@ -249,7 +193,12 @@ textarea,
 }
 
 .window__body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
   padding: 6px;
+  overflow: auto;
 }
 
 .window__status {
@@ -428,11 +377,15 @@ h3 {
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 16px;
+  /* Fills the body so the panel sits in the middle of the screen rather than under the strip. */
+  flex: 1;
+  min-height: 0;
 }
 
 .gate__intro {
-  padding: 40px 40px 0;
+  padding: 0 40px;
   text-align: center;
 }
 
@@ -449,7 +402,6 @@ h3 {
   gap: 6px;
   width: 380px;
   max-width: 100%;
-  margin: 0 auto 40px;
   padding: 20px;
   background: var(--face);
 }
@@ -491,7 +443,10 @@ h3 {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 8px;
-  align-items: start;
+  align-items: stretch;
+  /* Grows into whatever the window gives it; the list scrolls inside rather than the page. */
+  flex: 1;
+  min-height: 0;
 }
 
 @media (min-width: 44rem) {
@@ -500,7 +455,17 @@ h3 {
   }
 }
 
+.entry-detail,
+.entry-form {
+  /* Panels sit at the top of their column rather than stretching to the list's height. */
+  align-self: start;
+}
+
 .entry-list__well {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
   background: var(--field);
 }
 
@@ -527,7 +492,10 @@ h3 {
 }
 
 .entry-list__items {
-  max-height: 340px;
+  /* No fixed cap: the list takes the height the window offers and scrolls past that. A cap
+     would leave dead space below it now that the window fills the screen. */
+  flex: 1;
+  min-height: 0;
   margin: 0;
   padding: 0;
   overflow: auto;
@@ -694,6 +662,8 @@ button.danger {
 .vault {
   display: flex;
   flex-direction: column;
+  flex: 1;
+  min-height: 0;
   gap: 6px;
 }
 
