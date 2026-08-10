@@ -5,6 +5,31 @@ and versions follow [Semantic Versioning](https://semver.org/).
 
 A major version bump means the vault format changed in a way an older build cannot read.
 
+## [0.4.0] — 2026-08-10
+
+**Nothing about the application changed.** This release exists so the published binaries cover
+every platform, which until now they did not.
+
+### Added
+
+- **Installers for macOS, Windows and Linux**, built by CI on each platform. Tauri does not
+  cross-compile, so every earlier release shipped whatever the developer's laptop could produce —
+  an Apple Silicon `.dmg` and nothing else. macOS is now a universal binary, so it runs on Intel
+  too.
+- **Checks run on all three platforms** for every change. Two `cfg(not(unix))` branches in the
+  vault's persistence and the Windows clipboard path had never been compiled anywhere before
+  this; they compile, and their tests pass.
+
+### Notes
+
+`tests/ipc_commands.rs` does not run on Windows: its binary fails to load inside Tauri's mock
+runtime. What it covers has no platform-specific branch, and Linux and macOS run all of it.
+
+Compiling is not the same as verifying. `sync_parent_directory` on Windows does nothing, on the
+grounds that the rename is durable without it — that claim is still unverified.
+
+Every binary is unsigned. CI does not change that.
+
 ## [0.3.0] — 2026-08-10
 
 ### Changed
@@ -90,6 +115,7 @@ First release. Everything in the agreed scope works; nothing is signed yet.
 - The master password unavoidably exists in unwiped memory in the WebView and in the IPC
   payload. It is never stored, never logged, and discarded as soon as the key is derived.
 
+[0.4.0]: https://github.com/Xiza73/password-manager/releases/tag/v0.4.0
 [0.3.0]: https://github.com/Xiza73/password-manager/releases/tag/v0.3.0
 [0.2.0]: https://github.com/Xiza73/password-manager/releases/tag/v0.2.0
 [0.1.0]: https://github.com/Xiza73/password-manager/releases/tag/v0.1.0
