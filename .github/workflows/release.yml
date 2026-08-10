@@ -123,6 +123,20 @@ jobs:
           path: downloaded
           merge-multiple: true
 
+      # The bundler names its output "Password Manager_0.4.0_amd64.deb", and GitHub turns every
+      # space in an asset name into a dot on upload. Hashing before that rename produced a list
+      # naming files nobody could download: `shasum -c` matched none of them and the checksums
+      # shipped worthless. Renaming first makes the local name and the published name one string.
+      - name: Take the spaces out of the asset names
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd downloaded
+          for file in *; do
+            renamed=${file// /.}
+            [ "$file" = "$renamed" ] || mv -- "$file" "$renamed"
+          done
+
       # One list covering every platform, so a single command verifies whichever file was taken.
       - name: Checksum
         shell: bash
@@ -133,6 +147,13 @@ jobs:
           # format is the same either way, so `shasum -a 256 -c` verifies it on a Mac.
           sha256sum * > SHA256SUMS.txt
           sha256sum -c SHA256SUMS.txt
+          # Verifying here proves the bytes match these names on the runner, which is the one
+          # thing that was never in doubt. A surviving space means the name will change on upload
+          # and the list will point at nothing, so fail the release rather than publish it.
+          if grep -q '^[0-9a-f]\{64\}  .* ' SHA256SUMS.txt; then
+            echo "an asset name still contains a space; it would not survive upload" >&2
+            exit 1
+          fi
           cat SHA256SUMS.txt
 
       - name: Attach to the release
