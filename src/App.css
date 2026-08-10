@@ -1,107 +1,414 @@
-:root {
-  font-family:
-    system-ui,
-    -apple-system,
-    'Segoe UI',
-    sans-serif;
-  line-height: 1.5;
-  color-scheme: light dark;
+/*
+ * A late-nineties desktop skin.
+ *
+ * Everything raised — buttons, panels, window chrome — is drawn with four inset shadows rather
+ * than a border: a light edge top-left, a dark edge bottom-right, and a second pair inside them.
+ * That is what makes the bevel read as a physical edge. Everything sunken — text fields, list
+ * wells, status strips — uses the same four with the light and dark swapped. Pressing a button
+ * swaps them too, which is the whole trick.
+ *
+ * No border-radius anywhere. Rounded corners are the one thing that breaks the period instantly.
+ */
 
-  --surface: light-dark(#ffffff, #1c1c1e);
-  --border: light-dark(#d4d4d8, #3f3f46);
-  --muted: light-dark(#52525b, #a1a1aa);
-  --danger: light-dark(#b91c1c, #f87171);
-  --notice-surface: light-dark(#fef9c3, #422006);
-  --notice-border: light-dark(#fde047, #854d0e);
+:root {
+  /* Tahoma ships on Windows; Verdana and Geneva cover macOS and carry the same wide, plain
+     letterforms. */
+  --font-ui: Tahoma, Verdana, Geneva, sans-serif;
+  /* The reference used Inconsolata from a CDN. This application has a strict `default-src 'self'`
+     policy and runs offline, so a remote font would simply fail to load. */
+  --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, 'DejaVu Sans Mono', monospace;
+
+  --desk: linear-gradient(#121211, #080807);
+  --face: #33322d;
+  --hi: #5e5d55;
+  --hi2: #4a4942;
+  --mid: #141311;
+  --lo: #0a0a09;
+  --text: #e3e0d7;
+  --dim: #9b988e;
+  --faint: #85827a;
+  --field: #171613;
+  --field-text: #f2f0e8;
+  --title: linear-gradient(90deg, #0d0d0c, #34342f);
+  --accent: #c9a227;
+  --row-border: #201f1c;
+  --row-bg: #171613;
+  --row-fg: #d5d2c9;
+  --sel-bg: #3a3a33;
+  --sel-fg: #fdfbf2;
+  --weak: #c9a227;
+  --strong: #6fae7c;
+  --danger: #b5443c;
+  --danger-text: #e88c85;
+}
+
+:root[data-theme='light'] {
+  /* The teal desktop is the single most recognisable thing about the era. */
+  --desk: linear-gradient(#0e6a6a, #0b5757);
+  --face: #d6d3cc;
+  --hi: #ffffff;
+  --hi2: #efeee9;
+  --mid: #9d9b93;
+  --lo: #45443f;
+  --text: #1a1a18;
+  --dim: #52504a;
+  --faint: #6d6b64;
+  --field: #ffffff;
+  --field-text: #1a1a18;
+  --title: linear-gradient(90deg, #1b2f6b, #4a6bb0);
+  --accent: #1b2f6b;
+  --row-border: #eceae4;
+  --row-bg: #ffffff;
+  --row-fg: #1a1a18;
+  --sel-bg: #1b2f6b;
+  --sel-fg: #ffffff;
+  --weak: #b8860b;
+  --strong: #2e7d4f;
+  --danger: #b5443c;
+  --danger-text: #8e2f28;
+}
+
+* {
+  box-sizing: border-box;
 }
 
 body {
   margin: 0;
-  background: light-dark(#f4f4f5, #121214);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  color: var(--text);
 }
 
 .app {
   display: flex;
-  align-items: center;
   justify-content: center;
   min-height: 100vh;
-  padding: 1.5rem;
-  box-sizing: border-box;
+  padding: 48px 24px;
+  background: var(--desk);
 }
 
-.panel {
+/* ── the two bevels everything is built from ─────────────────────────────── */
+
+.bevel,
+.window,
+.panel,
+.entry-detail,
+.entry-form,
+.generator {
+  box-shadow:
+    inset -1px -1px 0 var(--lo),
+    inset 1px 1px 0 var(--hi),
+    inset -2px -2px 0 var(--mid),
+    inset 2px 2px 0 var(--hi2);
+}
+
+.bevel:active:not(:disabled) {
+  box-shadow:
+    inset 1px 1px 0 var(--lo),
+    inset -1px -1px 0 var(--hi),
+    inset 2px 2px 0 var(--mid);
+}
+
+.sunken,
+input,
+textarea,
+.entry-list__well,
+.window__status > * {
+  box-shadow:
+    inset 1px 1px 0 var(--lo),
+    inset -1px -1px 0 var(--hi),
+    inset 2px 2px 0 var(--mid);
+}
+
+/* ── the window ──────────────────────────────────────────────────────────── */
+
+.window {
+  /* `margin: auto` rather than `align-items: center` on the parent: centring a flex item that
+     way clips its top once the content is taller than the viewport, and the clipped part cannot
+     be scrolled back into view. */
+  margin: auto;
+  width: 860px;
+  max-width: 100%;
+  padding: 3px;
+  background: var(--face);
+  box-shadow:
+    inset -1px -1px 0 var(--lo),
+    inset 1px 1px 0 var(--hi),
+    inset -2px -2px 0 var(--mid),
+    inset 2px 2px 0 var(--hi2),
+    4px 4px 0 rgb(0 0 0 / 35%);
+}
+
+.window__title {
   display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  width: 100%;
-  max-width: 26rem;
-  padding: 1.75rem;
-  border: 1px solid var(--border);
-  border-radius: 0.75rem;
-  background: var(--surface);
+  align-items: center;
+  gap: 8px;
+  padding: 4px 4px 4px 6px;
+  background: var(--title);
 }
 
-.panel h1 {
-  margin: 0 0 0.5rem;
-  font-size: 1.25rem;
+.window__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  background: var(--face);
+  box-shadow:
+    inset -1px -1px 0 var(--lo),
+    inset 1px 1px 0 var(--hi);
 }
 
-.panel label {
-  font-size: 0.875rem;
-  font-weight: 600;
+.window__icon::after {
+  /* A padlock shackle, drawn rather than shipped as an asset. */
+  content: '';
+  width: 5px;
+  height: 7px;
+  border: 2px solid var(--accent);
+  border-radius: 1px;
 }
 
-.panel input {
-  padding: 0.5rem 0.625rem;
-  border: 1px solid var(--border);
-  border-radius: 0.375rem;
-  background: transparent;
-  color: inherit;
-  font: inherit;
+.window__name {
+  flex: 1;
+  overflow: hidden;
+  color: #ffffff;
+  font-size: 12.5px;
+  font-weight: bold;
+  letter-spacing: 0.2px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
-.panel input:disabled {
-  opacity: 0.6;
+.window__subtitle {
+  font-weight: normal;
 }
 
-.panel button {
-  margin-top: 0.75rem;
-  padding: 0.5rem 0.75rem;
-  border: 1px solid transparent;
-  border-radius: 0.375rem;
-  background: light-dark(#18181b, #fafafa);
-  color: light-dark(#fafafa, #18181b);
-  font: inherit;
-  font-weight: 600;
+.window__controls {
+  display: flex;
+  gap: 2px;
+}
+
+.window__control {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 16px;
+  background: var(--face);
+  color: var(--text);
+  font-size: 11px;
+  line-height: 1;
+  box-shadow:
+    inset -1px -1px 0 var(--lo),
+    inset 1px 1px 0 var(--hi),
+    inset -2px -2px 0 var(--mid),
+    inset 2px 2px 0 var(--hi2);
+}
+
+.window__control--minimise {
+  align-items: flex-end;
+  padding-bottom: 3px;
+}
+
+.window__control--minimise::after {
+  content: '';
+  width: 8px;
+  height: 2px;
+  background: var(--text);
+}
+
+.window__control--maximise::after {
+  content: '';
+  width: 9px;
+  height: 8px;
+  border: 1px solid var(--text);
+  border-top-width: 2px;
+}
+
+.window__menu {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 3px 4px 3px 6px;
+  border-bottom: 1px solid var(--mid);
+  color: var(--text);
+}
+
+.window__menu-item--first {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.window__menu-spacer {
+  flex: 1;
+}
+
+.window__theme {
+  padding: 2px 9px;
+  font-size: 11px;
+}
+
+.window__body {
+  padding: 6px;
+}
+
+.window__status {
+  display: flex;
+  gap: 3px;
+  margin-top: 6px;
+  color: var(--dim);
+  font-size: 11.5px;
+}
+
+.window__status > * {
+  padding: 4px 8px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.window__status > :first-child {
+  flex: 1;
+}
+
+.window__status > :not(:first-child) {
+  width: 150px;
+  flex: none;
+}
+
+/* ── controls ────────────────────────────────────────────────────────────── */
+
+button {
+  padding: 5px 12px;
+  border: none;
+  background: var(--face);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 12.5px;
   cursor: pointer;
+  box-shadow:
+    inset -1px -1px 0 var(--lo),
+    inset 1px 1px 0 var(--hi),
+    inset -2px -2px 0 var(--mid),
+    inset 2px 2px 0 var(--hi2);
 }
 
-.panel button:disabled {
-  cursor: progress;
-  opacity: 0.6;
+button:active:not(:disabled) {
+  box-shadow:
+    inset 1px 1px 0 var(--lo),
+    inset -1px -1px 0 var(--hi),
+    inset 2px 2px 0 var(--mid);
 }
 
-.hint,
-.warning,
-.error {
+button:disabled {
+  color: var(--faint);
+  cursor: default;
+}
+
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible {
+  outline: 1px dotted var(--text);
+  outline-offset: -4px;
+}
+
+input,
+textarea {
+  padding: 5px 8px;
+  border: none;
+  outline: none;
+  background: var(--field);
+  color: var(--field-text);
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+}
+
+input[type='password'],
+input[readonly],
+textarea[readonly] {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  letter-spacing: 0.5px;
+}
+
+input[type='checkbox'] {
+  accent-color: var(--accent);
+}
+
+textarea {
+  resize: vertical;
+}
+
+label {
+  font-size: 12px;
+}
+
+h1,
+h2,
+h3 {
   margin: 0;
-  font-size: 0.8125rem;
+  letter-spacing: -0.2px;
+}
+
+h1 {
+  font-size: 22px;
+}
+
+h2 {
+  font-size: 15px;
+}
+
+h3 {
+  font-size: 13px;
 }
 
 .hint {
-  color: var(--muted);
+  margin: 0;
+  color: var(--dim);
+  font-size: 11.5px;
 }
 
-.warning {
-  padding: 0.625rem 0.75rem;
-  border: 1px solid var(--notice-border);
-  border-radius: 0.375rem;
-  background: var(--notice-surface);
-}
-
+/* Warnings and errors are drawn as sunken fields with a marker block, the way a period dialog
+   would have shown them. */
+.warning,
 .error {
-  color: var(--danger);
-  font-weight: 600;
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin: 0;
+  padding: 10px 12px;
+  background: var(--field);
+  color: var(--field-text);
+  font-size: 12px;
+  box-shadow:
+    inset 1px 1px 0 var(--lo),
+    inset -1px -1px 0 var(--hi),
+    inset 2px 2px 0 var(--mid);
+}
+
+.warning::before,
+.error::before {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  color: #ffffff;
+  font-weight: bold;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.error::before {
+  content: '!';
+  background: var(--danger);
+}
+
+.warning::before {
+  content: 'i';
+  background: var(--accent);
+  color: var(--field);
 }
 
 .visually-hidden {
@@ -115,103 +422,171 @@ body {
   white-space: nowrap;
 }
 
-.app:has(.vault) {
-  align-items: flex-start;
-}
+/* ── the lock and create screens ─────────────────────────────────────────── */
 
-.vault {
+.gate {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
-  width: 100%;
-  max-width: 56rem;
+  align-items: center;
+  gap: 16px;
 }
 
-.vault__header {
+.gate__intro {
+  padding: 40px 40px 0;
+  text-align: center;
+}
+
+.gate__intro p {
+  margin: 8px auto 0;
+  max-width: 380px;
+  color: var(--dim);
+  text-wrap: pretty;
+}
+
+.panel {
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 1rem;
+  flex-direction: column;
+  gap: 6px;
+  width: 380px;
+  max-width: 100%;
+  margin: 0 auto 40px;
+  padding: 20px;
+  background: var(--face);
 }
 
-.vault__header h1 {
-  margin: 0;
-  font-size: 1.25rem;
+.panel > h1 {
+  margin-bottom: 6px;
+  font-size: 15px;
+}
+
+.panel__actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+
+.panel__actions button {
+  min-width: 92px;
+}
+
+/* ── the vault ───────────────────────────────────────────────────────────── */
+
+.vault__toolbar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 4px 2px 8px;
+}
+
+.vault__toolbar-spacer {
+  flex: 1;
+}
+
+.vault__toolbar input[type='search'] {
+  width: 190px;
 }
 
 .vault__body {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 1rem;
+  gap: 8px;
   align-items: start;
 }
 
-@media (min-width: 48rem) {
+@media (min-width: 44rem) {
   .vault__body:has(.entry-detail) {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
   }
 }
 
-.entry-list,
-.entry-detail,
-.entry-form {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  padding: 1rem;
-  border: 1px solid var(--border);
-  border-radius: 0.75rem;
-  background: var(--surface);
+.entry-list__well {
+  background: var(--field);
 }
 
-.entry-list__controls {
-  display: flex;
-  gap: 0.5rem;
+.entry-list__head,
+.entry-list__items button {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.2fr);
+  align-items: center;
 }
 
-.entry-list__controls input {
-  flex: 1;
+.entry-list__head {
+  background: var(--face);
+  border-bottom: 1px solid var(--mid);
+}
+
+.entry-list__head > span {
+  padding: 5px 9px;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: bold;
+  box-shadow:
+    inset -1px -1px 0 var(--mid),
+    inset 1px 1px 0 var(--hi);
 }
 
 .entry-list__items {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
+  max-height: 340px;
   margin: 0;
   padding: 0;
+  overflow: auto;
   list-style: none;
 }
 
 .entry-list__items button {
-  display: flex;
-  flex-direction: column;
-  gap: 0.125rem;
   width: 100%;
-  margin: 0;
-  padding: 0.5rem 0.625rem;
-  border: 1px solid transparent;
-  background: transparent;
-  color: inherit;
+  padding: 0;
+  border-bottom: 1px solid var(--row-border);
+  background: var(--row-bg);
+  color: var(--row-fg);
+  font-size: 13px;
+  font-weight: normal;
   text-align: left;
-  font-weight: 400;
+  cursor: default;
+  box-shadow: none;
 }
 
 .entry-list__items button:hover {
-  border-color: var(--border);
+  background: var(--sel-bg);
+  color: var(--sel-fg);
 }
 
 .entry-list__items button[aria-current] {
-  border-color: var(--border);
-  background: light-dark(#f4f4f5, #27272a);
+  background: var(--sel-bg);
+  color: var(--sel-fg);
 }
 
-.entry-list__site {
-  font-weight: 600;
+.entry-list__site,
+.entry-list__username {
+  display: block;
+  padding: 7px 9px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .entry-list__username {
-  font-size: 0.8125rem;
-  color: var(--muted);
+  color: inherit;
+  font-size: 12px;
+}
+
+.entry-list__empty {
+  padding: 14px 10px;
+  background: var(--row-bg);
+  color: var(--dim);
+}
+
+/* ── detail and form panels ──────────────────────────────────────────────── */
+
+.entry-detail,
+.entry-form,
+.generator {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+  background: var(--face);
 }
 
 .entry-detail header,
@@ -220,28 +595,28 @@ body {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.5rem;
+  gap: 6px;
 }
 
 .entry-detail header {
   justify-content: space-between;
+  margin-bottom: 4px;
 }
 
-.entry-detail header h2,
-.entry-form h2 {
-  margin: 0;
-  font-size: 1.0625rem;
+.entry-detail footer,
+.entry-form footer {
+  margin-top: 8px;
 }
 
 .entry-detail__username {
-  margin: 0;
-  color: var(--muted);
+  margin: 0 0 4px;
+  color: var(--dim);
 }
 
 .entry-detail__secret,
 .entry-form__secret {
   display: flex;
-  gap: 0.5rem;
+  gap: 6px;
 }
 
 .entry-detail__secret input,
@@ -250,102 +625,91 @@ body {
   min-width: 0;
 }
 
-.entry-detail input,
-.entry-detail textarea,
-.entry-form input,
-.entry-form textarea {
-  padding: 0.5rem 0.625rem;
-  border: 1px solid var(--border);
-  border-radius: 0.375rem;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  resize: vertical;
+.entry-detail__secret button,
+.entry-form__secret button {
+  flex: none;
+  padding: 2px 7px;
+  font-size: 11px;
 }
 
-.entry-detail label,
-.entry-form label {
-  font-size: 0.875rem;
-  font-weight: 600;
+button.danger {
+  color: var(--danger-text);
+  font-weight: bold;
 }
 
-.entry-detail button,
-.entry-form button,
-.entry-list button,
-.vault__header button {
-  padding: 0.4375rem 0.75rem;
-  border: 1px solid var(--border);
-  border-radius: 0.375rem;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.entry-form button[type='submit'] {
-  border-color: transparent;
-  background: light-dark(#18181b, #fafafa);
-  color: light-dark(#fafafa, #18181b);
-}
-
-.entry-detail button.danger,
-.entry-form button.danger {
-  border-color: var(--danger);
-  color: var(--danger);
-}
+/* ── the generator ───────────────────────────────────────────────────────── */
 
 .generator {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  margin-top: 0.5rem;
-  padding: 0.75rem;
-  border: 1px dashed var(--border);
-  border-radius: 0.5rem;
-}
-
-.generator h3 {
-  margin: 0;
-  font-size: 0.9375rem;
+  margin-top: 6px;
+  padding: 10px;
 }
 
 .generator__options {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.5rem 0.875rem;
-}
-
-.generator__options > label[for='generator-length'] {
-  margin-right: -0.375rem;
+  gap: 6px 12px;
 }
 
 .generator__options input[type='number'] {
-  width: 5rem;
+  width: 4.5rem;
 }
 
 .generator__toggle {
   display: flex;
   align-items: center;
-  gap: 0.375rem;
-  font-size: 0.8125rem;
-  font-weight: 400;
+  gap: 5px;
+  font-size: 11.5px;
 }
 
 .generator__toggle input {
   margin: 0;
 }
 
-.gate {
+.gate__note {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 1rem;
-  width: 100%;
+  gap: 8px;
+  margin-top: 8px;
+  font-size: 12px;
 }
 
-.gate > .warning {
-  width: 100%;
-  max-width: 56rem;
+.gate__tick {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 13px;
+  height: 13px;
+  background: var(--field);
+  color: var(--accent);
+  font-size: 11px;
+  line-height: 1;
+  box-shadow:
+    inset 1px 1px 0 var(--lo),
+    inset -1px -1px 0 var(--hi),
+    inset 2px 2px 0 var(--mid);
+}
+
+.vault {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.entry-list {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.window__status-lock {
+  width: auto;
+  padding: 2px 12px;
+  font-size: 11.5px;
+  box-shadow:
+    inset -1px -1px 0 var(--lo),
+    inset 1px 1px 0 var(--hi),
+    inset -2px -2px 0 var(--mid),
+    inset 2px 2px 0 var(--hi2);
 }

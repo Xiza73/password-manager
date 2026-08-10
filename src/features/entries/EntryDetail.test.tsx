@@ -32,7 +32,7 @@ describe('EntryDetail', () => {
 
     // Opening an entry must not put a password on screen for anyone walking past.
     expect(screen.queryByText('hunter2')).not.toBeInTheDocument();
-    expect(screen.getByLabelText('Password')).toHaveAttribute('type', 'password');
+    expect(screen.getByLabelText('Password:')).toHaveAttribute('type', 'password');
   });
 
   it('shows the password on request and hides it again', async () => {
@@ -40,10 +40,10 @@ describe('EntryDetail', () => {
     renderDetail();
 
     await user.click(screen.getByRole('button', { name: 'Show password' }));
-    expect(screen.getByLabelText('Password')).toHaveAttribute('type', 'text');
+    expect(screen.getByLabelText('Password:')).toHaveAttribute('type', 'text');
 
     await user.click(screen.getByRole('button', { name: 'Hide password' }));
-    expect(screen.getByLabelText('Password')).toHaveAttribute('type', 'password');
+    expect(screen.getByLabelText('Password:')).toHaveAttribute('type', 'password');
   });
 
   it('keeps notes hidden too', () => {
@@ -117,7 +117,7 @@ describe('EntryDetail', () => {
     );
 
     // Otherwise clicking through a list would leave every password on screen in turn.
-    expect(screen.getByLabelText('Password')).toHaveAttribute('type', 'password');
+    expect(screen.getByLabelText('Password:')).toHaveAttribute('type', 'password');
   });
 
   it('asks to copy the password without ever showing it', async () => {
@@ -129,7 +129,7 @@ describe('EntryDetail', () => {
     // Copying and revealing are separate actions: the common case is paste it somewhere, and
     // that never needs it on screen.
     expect(onCopy).toHaveBeenCalled();
-    expect(screen.getByLabelText('Password')).toHaveAttribute('type', 'password');
+    expect(screen.getByLabelText('Password:')).toHaveAttribute('type', 'password');
   });
 
   it('says nothing about the clipboard before anything is copied', () => {

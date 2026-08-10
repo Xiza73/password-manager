@@ -48,51 +48,60 @@ export function CreateVaultForm({
   const shown = localError || error;
 
   return (
-    <form className="panel" onSubmit={handleSubmit}>
-      <h1>Create your vault</h1>
+    <div className="gate">
+      <div className="gate__intro">
+        <h1>Create your vault</h1>
+        <p>Choose the one password that opens everything else.</p>
+      </div>
 
-      <p role="note" className="warning">
-        Your master password cannot be recovered. Nobody, including this application, can open the
-        vault without it — there is no reset and no backup copy of it anywhere.
-      </p>
-
-      <label htmlFor="master-password">Master password</label>
-      <input
-        id="master-password"
-        type="password"
-        value={password}
-        onChange={(event) => setPassword(event.target.value)}
-        autoComplete="off"
-        spellCheck={false}
-        autoFocus
-        disabled={busy}
-        aria-describedby="master-password-hint"
-      />
-      <p id="master-password-hint" className="hint">
-        At least {minimumLength} characters. Length is what makes it hard to guess, so a few
-        unrelated words beat a short password with symbols in it.
-      </p>
-
-      <label htmlFor="repeat-master-password">Repeat master password</label>
-      <input
-        id="repeat-master-password"
-        type="password"
-        value={repeated}
-        onChange={(event) => setRepeated(event.target.value)}
-        autoComplete="off"
-        spellCheck={false}
-        disabled={busy}
-      />
-
-      {shown && (
-        <p className="error" role="alert">
-          {shown}
+      <form className="panel" onSubmit={handleSubmit}>
+        <p role="note" className="warning">
+          Your master password cannot be recovered. Nobody, including this application, can open the
+          vault without it — there is no reset and no backup copy of it anywhere.
         </p>
-      )}
 
-      <button type="submit" disabled={busy}>
-        {busy ? 'Creating…' : 'Create vault'}
-      </button>
-    </form>
+        <label htmlFor="master-password">Master password:</label>
+        <input
+          id="master-password"
+          type="password"
+          value={password}
+          onChange={(event) => setPassword(event.target.value)}
+          placeholder="••••••••"
+          autoComplete="off"
+          spellCheck={false}
+          autoFocus
+          disabled={busy}
+          aria-describedby="master-password-hint"
+        />
+        <p id="master-password-hint" className="hint">
+          At least {minimumLength} characters. Length is what makes it hard to guess, so a few
+          unrelated words beat a short password with symbols in it.
+        </p>
+
+        <label htmlFor="repeat-master-password">Repeat master password:</label>
+        <input
+          id="repeat-master-password"
+          type="password"
+          value={repeated}
+          onChange={(event) => setRepeated(event.target.value)}
+          placeholder="••••••••"
+          autoComplete="off"
+          spellCheck={false}
+          disabled={busy}
+        />
+
+        {shown && (
+          <p className="error" role="alert">
+            {shown}
+          </p>
+        )}
+
+        <div className="panel__actions">
+          <button type="submit" className="bevel" disabled={busy}>
+            {busy ? 'Creating…' : 'Create vault'}
+          </button>
+        </div>
+      </form>
+    </div>
   );
 }

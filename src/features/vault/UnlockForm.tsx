@@ -24,32 +24,47 @@ export function UnlockForm({ onSubmit, error, busy = false }: UnlockFormProps) {
   }
 
   return (
-    <form className="panel" onSubmit={handleSubmit}>
-      <h1>Unlock your vault</h1>
+    <div className="gate">
+      <div className="gate__intro">
+        <h1>Enter your master password</h1>
+        <p>It is the only password you have to remember. Nothing else opens this vault.</p>
+      </div>
 
-      <label htmlFor="master-password">Master password</label>
-      <input
-        id="master-password"
-        type="password"
-        value={password}
-        onChange={(event) => setPassword(event.target.value)}
-        // Autofill and spellcheck both copy what is typed somewhere this application cannot
-        // reach to erase it.
-        autoComplete="off"
-        spellCheck={false}
-        autoFocus
-        disabled={busy}
-      />
+      <form className="panel" onSubmit={handleSubmit}>
+        <label htmlFor="master-password">Master password:</label>
+        <input
+          id="master-password"
+          type="password"
+          value={password}
+          onChange={(event) => setPassword(event.target.value)}
+          placeholder="••••••••"
+          // Autofill and spellcheck both copy what is typed somewhere this application cannot
+          // reach to erase it.
+          autoComplete="off"
+          spellCheck={false}
+          autoFocus
+          disabled={busy}
+        />
 
-      {error && (
-        <p className="error" role="alert">
-          {error}
+        <p className="hint gate__note">
+          <span className="gate__tick" aria-hidden="true">
+            ✓
+          </span>
+          Locks itself after five minutes of inactivity
         </p>
-      )}
 
-      <button type="submit" disabled={busy}>
-        {busy ? 'Unlocking…' : 'Unlock'}
-      </button>
-    </form>
+        {error && (
+          <p className="error" role="alert">
+            {error}
+          </p>
+        )}
+
+        <div className="panel__actions">
+          <button type="submit" className="bevel" disabled={busy}>
+            {busy ? 'Unlocking…' : 'Unlock'}
+          </button>
+        </div>
+      </form>
+    </div>
   );
 }

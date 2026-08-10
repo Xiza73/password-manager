@@ -16,10 +16,10 @@ describe('EntryForm', () => {
     const user = userEvent.setup();
     const { onSubmit } = renderForm();
 
-    await user.type(screen.getByLabelText('Site'), 'github.com');
-    await user.type(screen.getByLabelText('Username'), 'octocat');
-    await user.type(screen.getByLabelText('Password'), 'hunter2');
-    await user.type(screen.getByLabelText('Notes'), 'personal account');
+    await user.type(screen.getByLabelText('Site:'), 'github.com');
+    await user.type(screen.getByLabelText('Username:'), 'octocat');
+    await user.type(screen.getByLabelText('Password:'), 'hunter2');
+    await user.type(screen.getByLabelText('Notes:'), 'personal account');
     await user.click(screen.getByRole('button', { name: 'Save' }));
 
     expect(onSubmit).toHaveBeenCalledWith({
@@ -34,7 +34,7 @@ describe('EntryForm', () => {
     const user = userEvent.setup();
     const { onSubmit } = renderForm();
 
-    await user.type(screen.getByLabelText('Password'), 'hunter2');
+    await user.type(screen.getByLabelText('Password:'), 'hunter2');
     await user.click(screen.getByRole('button', { name: 'Save' }));
 
     // Rust refuses it too; catching it here saves a round trip to be told the same thing.
@@ -47,7 +47,7 @@ describe('EntryForm', () => {
     const { onSubmit } = renderForm();
 
     // An API key with no user, or a site plus a note, are both real entries.
-    await user.type(screen.getByLabelText('Site'), 'example.com');
+    await user.type(screen.getByLabelText('Site:'), 'example.com');
     await user.click(screen.getByRole('button', { name: 'Save' }));
 
     expect(onSubmit).toHaveBeenCalledWith({
@@ -63,14 +63,14 @@ describe('EntryForm', () => {
       initial: { site: 'github.com', username: 'octocat', password: 'hunter2', notes: '' },
     });
 
-    expect(screen.getByLabelText('Site')).toHaveValue('github.com');
-    expect(screen.getByLabelText('Password')).toHaveValue('hunter2');
+    expect(screen.getByLabelText('Site:')).toHaveValue('github.com');
+    expect(screen.getByLabelText('Password:')).toHaveValue('hunter2');
   });
 
   it('hides the password field', () => {
     renderForm();
 
-    expect(screen.getByLabelText('Password')).toHaveAttribute('type', 'password');
+    expect(screen.getByLabelText('Password:')).toHaveAttribute('type', 'password');
   });
 
   it('can show the password while typing it', async () => {
@@ -80,7 +80,7 @@ describe('EntryForm', () => {
     // Typing a long generated password blind is how people end up saving a typo.
     await user.click(screen.getByRole('button', { name: 'Show password' }));
 
-    expect(screen.getByLabelText('Password')).toHaveAttribute('type', 'text');
+    expect(screen.getByLabelText('Password:')).toHaveAttribute('type', 'text');
   });
 
   it('cancels', async () => {
