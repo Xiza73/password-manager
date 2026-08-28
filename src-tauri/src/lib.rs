@@ -60,6 +60,7 @@ pub fn run() {
             commands::create_vault,
             commands::unlock,
             commands::lock,
+            commands::reset_vault,
             commands::list_entries,
             commands::reveal_entry,
             commands::add_entry,

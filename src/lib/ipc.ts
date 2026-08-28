@@ -108,6 +108,15 @@ export const vault = {
 
   lock: () => call<void>('lock'),
 
+  /**
+   * Deletes the vault and returns the app to first-run.
+   *
+   * The only way back in when the master password is lost: it recovers nothing and discards
+   * everything. There is no recovery by design — the key derives from the password and nothing
+   * else — so this is the honest alternative, not a workaround.
+   */
+  reset: () => call<void>('reset_vault'),
+
   list: (query?: string) => call<CredentialSummary[]>('list_entries', { query: query ?? null }),
 
   reveal: (id: string) => call<RevealedCredential>('reveal_entry', { id }),

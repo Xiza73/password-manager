@@ -19,7 +19,9 @@ use crate::vault::entries::{
     Credential, CredentialDraft, CredentialSummary, EntryError, EntryId, VaultData,
 };
 use crate::vault::format::{decode_with, read_counter, SealingKey, VaultError, FIRST_SAVE};
-use crate::vault::storage::{exists, highest_seen, read_sealed, save_sealed, StorageError};
+use crate::vault::storage::{
+    exists, highest_seen, read_sealed, remove_vault, save_sealed, StorageError,
+};
 
 /// Shortest master password this application will accept, in characters.
 ///
@@ -182,6 +184,25 @@ impl Session {
         });
 
         Ok(Unlocked { rolled_back })
+    }
+
+    /// Deletes the vault and returns the session to its first-run state.
+    ///
+    /// This is the only way back in when the master password is lost. There is no recovery — the
+    /// key derives from the password and nothing else — so the honest alternative is to discard
+    /// the vault and start over. It destroys every credential, and nothing about that is
+    /// reversible.
+    pub fn reset(&mut self) -> Result<(), SessionError> {
+        // Delete before locking. A failed delete leaves the session as it was rather than closing
+        // a vault the user did not ask to close.
+        remove_vault(&self.path)?;
+
+        // Drop any key and decrypted contents still in memory. On the unlock screen the session
+        // is already locked, so this is a no-op there, but it makes the postcondition hold from
+        // any state.
+        self.lock();
+
+        Ok(())
     }
 
     /// Closes the vault, dropping the key and the decrypted contents.
@@ -755,6 +776,56 @@ mod tests {
         sorted.sort_unstable();
         sorted.dedup();
         assert_eq!(sorted, seen, "counters must be strictly increasing");
+    }
+
+    #[test]
+    fn resetting_deletes_the_vault_and_returns_to_first_run() {
+        let dir = TempDir::new().unwrap();
+        let now = Instant::now();
+        let mut session = unlocked(&dir, now);
+        session.add(draft("a.com", "u", "p"), now).unwrap();
+        session.lock();
+
+        session.reset().unwrap();
+
+        assert!(!session.vault_exists());
+        assert!(!session.is_unlocked());
+        // The credentials are gone, not hidden: a vault created afterwards opens empty.
+        session.create(&secret(MASTER), now).unwrap();
+        assert!(session.list("", now).unwrap().is_empty());
+    }
+
+    #[test]
+    fn a_vault_created_after_a_reset_does_not_look_like_a_rollback() {
+        let dir = TempDir::new().unwrap();
+        let now = Instant::now();
+        let mut session = unlocked(&dir, now);
+        // Push the counter up, so a surviving `.seen` record would out-number a fresh vault.
+        for site in ["a.com", "b.com", "c.com"] {
+            session.add(draft(site, "u", "p"), now).unwrap();
+        }
+        session.lock();
+
+        session.reset().unwrap();
+
+        // Start over — a lost password is the reason this exists — with a different master.
+        session.create(&secret("a different master"), now).unwrap();
+        session.lock();
+        let opened = session.unlock(&secret("a different master"), now).unwrap();
+
+        // Had the reset spared the `.seen` file, the new vault would carry a lower counter than
+        // the deleted one and cry rollback on every unlock until it happened to save past it.
+        assert!(!opened.rolled_back);
+    }
+
+    #[test]
+    fn resetting_with_no_vault_is_harmless() {
+        let dir = TempDir::new().unwrap();
+        let mut session = session_in(&dir);
+
+        // Nothing to delete; the end state is identical either way.
+        assert!(session.reset().is_ok());
+        assert!(!session.vault_exists());
     }
 
     #[test]

@@ -55,6 +55,31 @@ pub fn save_sealed(
     Ok(())
 }
 
+/// Deletes the vault and every file that belongs to it, returning the location to first-run.
+///
+/// The `.seen` counter record goes with it: leaving it behind would make the next freshly created
+/// vault look like a rollback of the one just deleted, and warn on every unlock until it happened
+/// to save past the old counter. Any leftover staging file goes too — it is encrypted vault data,
+/// and a wipe that promises to delete everything must not spare it.
+///
+/// A file that is already gone is the end state this asks for, not a failure, so its absence is
+/// not reported as an error.
+pub fn remove_vault(path: &Path) -> Result<(), StorageError> {
+    remove_if_present(path)?;
+    remove_if_present(&seen_path(path))?;
+    remove_if_present(&temp_path(path))?;
+
+    Ok(())
+}
+
+fn remove_if_present(path: &Path) -> Result<(), StorageError> {
+    match fs::remove_file(path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(StorageError::Io(error)),
+    }
+}
+
 /// Where the highest save counter seen so far is recorded.
 fn seen_path(path: &Path) -> PathBuf {
     let mut name = path.file_name().unwrap_or_default().to_os_string();
@@ -423,6 +448,36 @@ mod tests {
 
         assert!(blocked.is_err(), "the save must not have been possible");
         assert_eq!(load(&path, PASSWORD).unwrap().as_slice(), BODY);
+    }
+
+    #[test]
+    fn removing_a_vault_deletes_it_and_everything_that_belongs_to_it() {
+        let dir = TempDir::new().unwrap();
+        let path = vault_in(&dir);
+        save_body(&path, FIRST_SAVE, BODY);
+        // What a crash mid-write leaves behind — encrypted vault data all the same, so a wipe
+        // that claims to delete everything must not leave it sitting there.
+        std::fs::write(temp_path(&path), b"a crashed write's leftover").unwrap();
+
+        remove_vault(&path).unwrap();
+
+        let remaining: Vec<_> = std::fs::read_dir(dir.path())
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name())
+            .collect();
+        assert!(
+            remaining.is_empty(),
+            "the vault, its counter record and any staging file should all be gone, found {remaining:?}"
+        );
+    }
+
+    #[test]
+    fn removing_an_absent_vault_is_not_an_error() {
+        let dir = TempDir::new().unwrap();
+
+        // The desired end state — nothing here — already holds, so this reports success rather
+        // than failing on a file that was never there.
+        assert!(remove_vault(&vault_in(&dir)).is_ok());
     }
 
     #[test]

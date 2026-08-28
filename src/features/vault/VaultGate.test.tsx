@@ -12,6 +12,7 @@ vi.mock('../../lib/ipc', async (importOriginal) => ({
     minimumMasterPasswordLength: vi.fn(),
     create: vi.fn(),
     unlock: vi.fn(),
+    reset: vi.fn(),
   },
   onVaultLocked: vi.fn(),
 }));
@@ -29,6 +30,7 @@ beforeEach(() => {
   mocked.exists.mockResolvedValue(true);
   mocked.unlock.mockResolvedValue({ rolledBack: false });
   mocked.create.mockResolvedValue(undefined);
+  mocked.reset.mockResolvedValue(undefined);
 });
 
 function renderGate() {
@@ -167,6 +169,33 @@ describe('VaultGate', () => {
     await user.click(screen.getByRole('button', { name: 'Dismiss' }));
 
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('deletes the vault and moves to creating a new one when reset', async () => {
+    const user = userEvent.setup();
+    renderGate();
+    await screen.findByRole('button', { name: 'Unlock' });
+
+    await user.click(screen.getByRole('button', { name: /forgot your master password/i }));
+    await user.click(screen.getByRole('button', { name: /delete vault and start over/i }));
+
+    // The deleted vault is gone, so the only coherent next screen is creating a new one: a lost
+    // password is not recovered, it is replaced.
+    expect(await screen.findByRole('button', { name: 'Create vault' })).toBeInTheDocument();
+    expect(mocked.reset).toHaveBeenCalledTimes(1);
+  });
+
+  it('stays on the unlock screen and explains if the reset fails', async () => {
+    const user = userEvent.setup();
+    mocked.reset.mockRejectedValue({ code: 'storage', message: 'no' });
+    renderGate();
+    await screen.findByRole('button', { name: 'Unlock' });
+
+    await user.click(screen.getByRole('button', { name: /forgot your master password/i }));
+    await user.click(screen.getByRole('button', { name: /delete vault and start over/i }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/could not be read or written/i);
+    expect(screen.queryByRole('button', { name: 'Create vault' })).not.toBeInTheDocument();
   });
 
   it('stops listening for the lock event when it goes away', async () => {

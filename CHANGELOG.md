@@ -5,6 +5,18 @@ and versions follow [Semantic Versioning](https://semver.org/).
 
 A major version bump means the vault format changed in a way an older build cannot read.
 
+## [Unreleased]
+
+### Added
+
+- **Delete the vault and start over**, from a "Forgot your master password?" affordance on the
+  unlock screen. There is no password recovery and there never will be — the key derives from the
+  master password and nothing else, so anything that could reopen the vault for you could reopen
+  it for anyone. This is the honest alternative: it recovers nothing and discards everything,
+  behind a two-step confirmation that states the cost in plain words. It deletes the counter
+  record along with the vault, so a vault created next does not masquerade as a rollback of the
+  deleted one.
+
 ## [0.4.1] — 2026-08-10
 
 Nothing in the application changed. The installers behave exactly as 0.4.0's do; what this

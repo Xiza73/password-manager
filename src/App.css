@@ -659,6 +659,36 @@ button.danger {
     inset 2px 2px 0 var(--mid);
 }
 
+.gate__recovery {
+  display: flex;
+  justify-content: center;
+  width: 380px;
+  max-width: 100%;
+}
+
+/* An understated text affordance, not a bevelled button: the way out of a lost password should
+   read as a quiet last resort, never invite the same click as Unlock. */
+.gate__recovery-link {
+  padding: 4px 6px;
+  background: none;
+  box-shadow: none;
+  color: var(--dim);
+  font-size: 12px;
+  text-decoration: underline;
+}
+
+.gate__recovery-link:active:not(:disabled) {
+  box-shadow: none;
+}
+
+.gate__recovery-link:hover {
+  color: var(--text);
+}
+
+.gate__reset {
+  gap: 10px;
+}
+
 .vault {
   display: flex;
   flex-direction: column;
