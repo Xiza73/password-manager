@@ -48,6 +48,7 @@ impl Harness {
                 commands::create_vault,
                 commands::unlock,
                 commands::lock,
+                commands::reset_vault,
                 commands::list_entries,
                 commands::reveal_entry,
                 commands::add_entry,
@@ -293,6 +294,30 @@ fn reports_a_missing_credential_with_the_expected_code() {
         ),
         "not_found"
     );
+}
+
+#[test]
+fn resets_the_vault_back_to_first_run() {
+    let harness = Harness::new();
+    harness.ok("create_vault", json!({ "password": MASTER }));
+    harness.ok(
+        "add_entry",
+        json!({ "draft": draft("github.com", "octocat", "hunter2") }),
+    );
+
+    harness.ok("reset_vault", json!({}));
+
+    // The only way back in when the master password is lost: it recovers nothing and discards
+    // everything, leaving the app exactly as a fresh installation.
+    assert_eq!(harness.ok("vault_exists", json!({})), json!(false));
+    assert_eq!(harness.ok("is_unlocked", json!({})), json!(false));
+
+    harness.ok("create_vault", json!({ "password": MASTER }));
+    assert!(harness
+        .ok("list_entries", json!({ "query": null }))
+        .as_array()
+        .expect("a list")
+        .is_empty());
 }
 
 fn options(length: u64) -> Value {

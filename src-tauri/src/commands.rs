@@ -126,6 +126,15 @@ pub fn lock(state: State<'_, AppState>) -> Result<(), IpcError> {
     })
 }
 
+/// Deletes the vault and returns the app to first-run.
+///
+/// The way out of a lost master password: it recovers nothing and discards everything. The
+/// interface confirms with the user before ever reaching this.
+#[tauri::command]
+pub fn reset_vault(state: State<'_, AppState>) -> Result<(), IpcError> {
+    with_session(&state, |session| session.reset())
+}
+
 #[tauri::command]
 pub fn list_entries(
     query: Option<String>,
