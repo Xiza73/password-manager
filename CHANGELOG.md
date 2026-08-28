@@ -5,7 +5,11 @@ and versions follow [Semantic Versioning](https://semver.org/).
 
 A major version bump means the vault format changed in a way an older build cannot read.
 
-## [Unreleased]
+## [0.5.0] — 2026-08-28
+
+Two ways to manage the master password, and the first release since 0.3.0 whose behaviour a
+user will notice. The vault format is unchanged (still version 2), so a 0.4.x vault opens here
+and a 0.5.0 vault opens in 0.4.x.
 
 ### Added
 
@@ -153,6 +157,7 @@ First release. Everything in the agreed scope works; nothing is signed yet.
 - The master password unavoidably exists in unwiped memory in the WebView and in the IPC
   payload. It is never stored, never logged, and discarded as soon as the key is derived.
 
+[0.5.0]: https://github.com/Xiza73/password-manager/releases/tag/v0.5.0
 [0.4.1]: https://github.com/Xiza73/password-manager/releases/tag/v0.4.1
 [0.4.0]: https://github.com/Xiza73/password-manager/releases/tag/v0.4.0
 [0.3.0]: https://github.com/Xiza73/password-manager/releases/tag/v0.3.0
