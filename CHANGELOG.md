@@ -9,6 +9,11 @@ A major version bump means the vault format changed in a way an older build cann
 
 ### Added
 
+- **Change the master password** from inside an open vault, without losing a credential. The
+  vault is re-encrypted under a key derived from the new password with a fresh salt — and at the
+  current KDF cost, so a change also upgrades an older vault's cost. The current password is
+  required and verified in Rust, so a vault left open and unattended cannot have its master
+  password changed out from under its owner. The vault stays open under the new key; no re-unlock.
 - **Delete the vault and start over**, from a "Forgot your master password?" affordance on the
   unlock screen. There is no password recovery and there never will be — the key derives from the
   master password and nothing else, so anything that could reopen the vault for you could reopen
