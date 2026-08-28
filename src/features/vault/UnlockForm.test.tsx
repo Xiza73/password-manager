@@ -5,8 +5,9 @@ import { UnlockForm } from './UnlockForm';
 
 function renderForm(props: Partial<React.ComponentProps<typeof UnlockForm>> = {}) {
   const onSubmit = props.onSubmit ?? vi.fn();
-  render(<UnlockForm onSubmit={onSubmit} {...props} />);
-  return { onSubmit };
+  const onReset = props.onReset ?? vi.fn();
+  render(<UnlockForm onSubmit={onSubmit} onReset={onReset} {...props} />);
+  return { onSubmit, onReset };
 }
 
 describe('UnlockForm', () => {
@@ -73,5 +74,43 @@ describe('UnlockForm', () => {
 
     // Unlocking costs a fifth of a second of Argon2; without this the button invites a queue.
     expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it('does not offer to delete the vault until asked', () => {
+    renderForm();
+
+    // The destructive control is one deliberate step away, never a stray click from the unlock
+    // button. Nothing that deletes every credential sits armed on the first screen.
+    expect(
+      screen.queryByRole('button', { name: /delete vault and start over/i })
+    ).not.toBeInTheDocument();
+  });
+
+  it('does not delete on the first click, only after a confirmation', async () => {
+    const user = userEvent.setup();
+    const { onReset } = renderForm();
+
+    await user.click(screen.getByRole('button', { name: /forgot your master password/i }));
+
+    // The confirmation states the cost in plain words before the destructive button appears.
+    expect(screen.getByText(/cannot be undone/i)).toBeInTheDocument();
+    expect(onReset).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: /delete vault and start over/i }));
+
+    expect(onReset).toHaveBeenCalledTimes(1);
+  });
+
+  it('lets the reset be backed out of', async () => {
+    const user = userEvent.setup();
+    const { onReset } = renderForm();
+
+    await user.click(screen.getByRole('button', { name: /forgot your master password/i }));
+    await user.click(screen.getByRole('button', { name: /keep the vault/i }));
+
+    expect(
+      screen.queryByRole('button', { name: /delete vault and start over/i })
+    ).not.toBeInTheDocument();
+    expect(onReset).not.toHaveBeenCalled();
   });
 });

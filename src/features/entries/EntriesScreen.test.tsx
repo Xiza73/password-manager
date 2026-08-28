@@ -17,6 +17,8 @@ vi.mock('../../lib/ipc', async (importOriginal) => ({
     lock: vi.fn(),
     copyPassword: vi.fn(),
     generatePassword: vi.fn(),
+    changeMasterPassword: vi.fn(),
+    minimumMasterPasswordLength: vi.fn(),
   },
 }));
 
@@ -45,6 +47,8 @@ beforeEach(() => {
   mocked.lock.mockResolvedValue(undefined);
   mocked.copyPassword.mockResolvedValue({ secondsUntilClear: 30, excludedFromHistory: true });
   mocked.generatePassword.mockResolvedValue({ password: 'generated', entropyBits: 130 });
+  mocked.changeMasterPassword.mockResolvedValue(undefined);
+  mocked.minimumMasterPasswordLength.mockResolvedValue(12);
 });
 
 function renderScreen(relock = vi.fn()) {
@@ -201,6 +205,59 @@ describe('EntriesScreen', () => {
 
     await waitFor(() => expect(mocked.lock).toHaveBeenCalled());
     expect(relock).toHaveBeenCalled();
+  });
+
+  it('changes the master password and returns to the vault with a notice', async () => {
+    const user = userEvent.setup();
+    renderScreen();
+    await screen.findByRole('button', { name: 'Change password' });
+
+    await user.click(screen.getByRole('button', { name: 'Change password' }));
+    await user.type(screen.getByLabelText('Current master password:'), 'the old password');
+    await user.type(screen.getByLabelText('New master password:'), 'a brand new password');
+    await user.type(screen.getByLabelText('Repeat new master password:'), 'a brand new password');
+    await user.click(screen.getByRole('button', { name: 'Change password' }));
+
+    await waitFor(() =>
+      expect(mocked.changeMasterPassword).toHaveBeenCalledWith(
+        'the old password',
+        'a brand new password'
+      )
+    );
+    // Back in the vault, with confirmation the change took — not left wondering.
+    expect(await screen.findByRole('button', { name: 'New entry' })).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent(/master password changed/i);
+  });
+
+  it('stays on the form and explains when the current password is wrong', async () => {
+    const user = userEvent.setup();
+    mocked.changeMasterPassword.mockRejectedValue({ code: 'unauthentic', message: 'no' });
+    renderScreen();
+    await screen.findByRole('button', { name: 'Change password' });
+
+    await user.click(screen.getByRole('button', { name: 'Change password' }));
+    await user.type(screen.getByLabelText('Current master password:'), 'the wrong password');
+    await user.type(screen.getByLabelText('New master password:'), 'a brand new password');
+    await user.type(screen.getByLabelText('Repeat new master password:'), 'a brand new password');
+    await user.click(screen.getByRole('button', { name: 'Change password' }));
+
+    // The message names the current password, not "the vault": in this flow that is the field
+    // that was wrong, and the unlock-flavoured wording would send the user looking in the wrong
+    // place.
+    expect(await screen.findByRole('alert')).toHaveTextContent(/current password is not correct/i);
+    expect(screen.queryByRole('button', { name: 'New entry' })).not.toBeInTheDocument();
+  });
+
+  it('leaves the master password unchanged when the change is cancelled', async () => {
+    const user = userEvent.setup();
+    renderScreen();
+    await screen.findByRole('button', { name: 'Change password' });
+
+    await user.click(screen.getByRole('button', { name: 'Change password' }));
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    expect(await screen.findByRole('button', { name: 'New entry' })).toBeInTheDocument();
+    expect(mocked.changeMasterPassword).not.toHaveBeenCalled();
   });
 
   it('returns to the lock screen when a command reports the vault is locked', async () => {

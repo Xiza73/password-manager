@@ -74,6 +74,23 @@ export function VaultGate({ children }: VaultGateProps) {
     };
   }, [relock]);
 
+  const resetVault = useCallback(async () => {
+    setBusy(true);
+    setError('');
+
+    try {
+      await vault.reset();
+      // The vault is gone, so the only coherent next screen is creating a new one. A lost
+      // password is replaced, never recovered.
+      setRolledBack(false);
+      setScreen('create');
+    } catch (failure) {
+      setError(errorMessage(failure));
+    } finally {
+      setBusy(false);
+    }
+  }, []);
+
   const attempt = useCallback(async (operation: () => Promise<void>) => {
     setBusy(true);
     setError('');
@@ -137,6 +154,7 @@ export function VaultGate({ children }: VaultGateProps) {
             setRolledBack((await vault.unlock(password)).rolledBack);
           })
         }
+        onReset={() => void resetVault()}
         error={error}
         busy={busy}
       />

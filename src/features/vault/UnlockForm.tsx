@@ -2,6 +2,8 @@ import { useState, type FormEvent } from 'react';
 
 interface UnlockFormProps {
   onSubmit: (password: string) => void;
+  /** Deletes the vault and starts over. The only answer to a lost master password. */
+  onReset: () => void;
   error?: string;
   busy?: boolean;
 }
@@ -10,8 +12,11 @@ interface UnlockFormProps {
  * Asks for the master password. Holds no state beyond what is being typed and reports nothing
  * about whether the vault is open — that answer belongs to Rust.
  */
-export function UnlockForm({ onSubmit, error, busy = false }: UnlockFormProps) {
+export function UnlockForm({ onSubmit, onReset, error, busy = false }: UnlockFormProps) {
   const [password, setPassword] = useState('');
+  // The destructive path is deliberately two steps: reveal, then confirm. Deleting every
+  // credential must never be a stray click away from the unlock button.
+  const [confirmingReset, setConfirmingReset] = useState(false);
 
   function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -65,6 +70,39 @@ export function UnlockForm({ onSubmit, error, busy = false }: UnlockFormProps) {
           </button>
         </div>
       </form>
+
+      <div className="gate__recovery">
+        {confirmingReset ? (
+          <div className="panel gate__reset" role="group" aria-label="Delete this vault">
+            <p className="warning">
+              There is no way to recover a forgotten master password — it is never stored, so
+              nothing can look it up. The only way forward is to delete this vault and start a new
+              one. Every credential in it goes with it, and this cannot be undone.
+            </p>
+            <div className="panel__actions">
+              <button type="button" className="bevel danger" onClick={onReset} disabled={busy}>
+                {busy ? 'Deleting…' : 'Delete vault and start over'}
+              </button>
+              <button
+                type="button"
+                className="bevel"
+                onClick={() => setConfirmingReset(false)}
+                disabled={busy}
+              >
+                Keep the vault
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            type="button"
+            className="gate__recovery-link"
+            onClick={() => setConfirmingReset(true)}
+          >
+            Forgot your master password?
+          </button>
+        )}
+      </div>
     </div>
   );
 }

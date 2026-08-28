@@ -18,8 +18,10 @@ use crate::secret::SecretString;
 use crate::vault::entries::{
     Credential, CredentialDraft, CredentialSummary, EntryError, EntryId, VaultData,
 };
-use crate::vault::format::{decode_with, read_counter, SealingKey, VaultError, FIRST_SAVE};
-use crate::vault::storage::{exists, highest_seen, read_sealed, save_sealed, StorageError};
+use crate::vault::format::{decode, decode_with, read_counter, SealingKey, VaultError, FIRST_SAVE};
+use crate::vault::storage::{
+    exists, highest_seen, read_sealed, remove_vault, save_sealed, StorageError,
+};
 
 /// Shortest master password this application will accept, in characters.
 ///
@@ -182,6 +184,72 @@ impl Session {
         });
 
         Ok(Unlocked { rolled_back })
+    }
+
+    /// Deletes the vault and returns the session to its first-run state.
+    ///
+    /// This is the only way back in when the master password is lost. There is no recovery — the
+    /// key derives from the password and nothing else — so the honest alternative is to discard
+    /// the vault and start over. It destroys every credential, and nothing about that is
+    /// reversible.
+    pub fn reset(&mut self) -> Result<(), SessionError> {
+        // Delete before locking. A failed delete leaves the session as it was rather than closing
+        // a vault the user did not ask to close.
+        remove_vault(&self.path)?;
+
+        // Drop any key and decrypted contents still in memory. On the unlock screen the session
+        // is already locked, so this is a no-op there, but it makes the postcondition hold from
+        // any state.
+        self.lock();
+
+        Ok(())
+    }
+
+    /// Re-keys the open vault under a new master password, keeping every credential.
+    ///
+    /// The current password is required and verified against the file on disk, not taken on trust
+    /// from the open session. Unlocking already proved someone knew it once; re-keying the thing
+    /// that guards every credential should require proving it again, now — otherwise a vault left
+    /// open and unattended could have its master password changed out from under its owner.
+    ///
+    /// The new key is derived with a fresh salt at this build's cost, so a change also lifts an
+    /// older vault's KDF cost to the current recommendation. The vault stays open under the new
+    /// key: nothing is re-locked, and the next save already seals with it.
+    pub fn change_master_password(
+        &mut self,
+        current: &SecretString,
+        next: &SecretString,
+        now: Instant,
+    ) -> Result<(), SessionError> {
+        // Must be open and not idle. The borrow is dropped at once; the re-key needs `&mut self`.
+        self.active(now)?;
+
+        // Re-authenticate before evaluating the request. A wrong current password comes back as
+        // `Unauthentic`, the same answer a bad unlock gives — the crypto cannot tell the two
+        // apart and neither should the caller.
+        let file = read_sealed(&self.path)?;
+        decode(current.expose().as_bytes(), &file)?;
+
+        check_master_password(next)?;
+
+        // A fresh salt is drawn here, so the re-keyed file shares nothing with the old one beyond
+        // its contents.
+        let sealing = SealingKey::create(next.expose().as_bytes(), self.params)?;
+
+        let State::Open(open) = &mut self.state else {
+            return Err(SessionError::Locked);
+        };
+
+        let body = open.data.to_bytes()?;
+        // Written atomically past the highest counter seen. If this fails, the old file — under
+        // the old password — is left intact, and the session keeps its old key below.
+        save_sealed(&self.path, &sealing, open.next_save, &body)?;
+
+        // Only now that the new file is safely on disk does the session adopt the new key.
+        open.sealing = sealing;
+        open.next_save += 1;
+
+        Ok(())
     }
 
     /// Closes the vault, dropping the key and the decrypted contents.
@@ -755,6 +823,176 @@ mod tests {
         sorted.sort_unstable();
         sorted.dedup();
         assert_eq!(sorted, seen, "counters must be strictly increasing");
+    }
+
+    const NEW_MASTER: &str = "a brand new master password";
+
+    #[test]
+    fn changing_the_master_password_reopens_the_vault_under_the_new_one() {
+        let dir = TempDir::new().unwrap();
+        let now = Instant::now();
+        let mut session = unlocked(&dir, now);
+        let id = session
+            .add(draft("github.com", "octocat", "hunter2"), now)
+            .unwrap();
+
+        session
+            .change_master_password(&secret(MASTER), &secret(NEW_MASTER), now)
+            .unwrap();
+        session.lock();
+
+        // The old password no longer opens it — the key it derived is gone from the file.
+        assert!(matches!(
+            session.unlock(&secret(MASTER), now),
+            Err(SessionError::Vault(VaultError::Unauthentic))
+        ));
+        // The new one does, and every credential survived the re-key untouched.
+        session.unlock(&secret(NEW_MASTER), now).unwrap();
+        assert_eq!(
+            session.reveal(id, now).unwrap().password.expose(),
+            "hunter2"
+        );
+    }
+
+    #[test]
+    fn a_password_change_keeps_the_vault_open_under_the_new_key() {
+        let dir = TempDir::new().unwrap();
+        let now = Instant::now();
+        let mut session = unlocked(&dir, now);
+
+        session
+            .change_master_password(&secret(MASTER), &secret(NEW_MASTER), now)
+            .unwrap();
+
+        // No re-unlock: the session adopted the new key in place, and edits from here seal under
+        // it — a separate session opening with the new password sees them.
+        assert!(session.is_unlocked());
+        session.add(draft("a.com", "u", "p"), now).unwrap();
+        session.lock();
+        session.unlock(&secret(NEW_MASTER), now).unwrap();
+        assert_eq!(session.list("", now).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn refuses_a_password_change_with_the_wrong_current_password() {
+        let dir = TempDir::new().unwrap();
+        let now = Instant::now();
+        let mut session = unlocked(&dir, now);
+
+        let result = session.change_master_password(
+            &secret("not the current one"),
+            &secret(NEW_MASTER),
+            now,
+        );
+
+        // Re-authentication is what stops a change made at an unattended open vault, so a wrong
+        // current password is refused with the same answer as a bad unlock.
+        assert!(matches!(
+            result,
+            Err(SessionError::Vault(VaultError::Unauthentic))
+        ));
+        // Nothing changed: the original password still opens the vault.
+        session.lock();
+        session.unlock(&secret(MASTER), now).unwrap();
+        assert!(session.is_unlocked());
+    }
+
+    #[test]
+    fn refuses_a_weak_new_master_password() {
+        let dir = TempDir::new().unwrap();
+        let now = Instant::now();
+        let mut session = unlocked(&dir, now);
+
+        let result = session.change_master_password(&secret(MASTER), &secret("short"), now);
+
+        assert!(matches!(
+            result,
+            Err(SessionError::WeakMasterPassword { minimum })
+                if minimum == MIN_MASTER_PASSWORD_LEN
+        ));
+        // The vault was left under its original password, unchanged.
+        session.lock();
+        session.unlock(&secret(MASTER), now).unwrap();
+    }
+
+    #[test]
+    fn refuses_a_password_change_while_locked() {
+        let dir = TempDir::new().unwrap();
+        let now = Instant::now();
+        let mut session = unlocked(&dir, now);
+        session.lock();
+
+        let result = session.change_master_password(&secret(MASTER), &secret(NEW_MASTER), now);
+
+        assert!(matches!(result, Err(SessionError::Locked)));
+    }
+
+    #[test]
+    fn a_changed_password_does_not_leave_the_vault_looking_rolled_back() {
+        let dir = TempDir::new().unwrap();
+        let now = Instant::now();
+        let mut session = unlocked(&dir, now);
+        session.add(draft("a.com", "u", "p"), now).unwrap();
+
+        session
+            .change_master_password(&secret(MASTER), &secret(NEW_MASTER), now)
+            .unwrap();
+        session.lock();
+
+        // The re-key writes past the highest counter seen, so it is strictly newer than what it
+        // replaced rather than an apparent rollback.
+        let opened = session.unlock(&secret(NEW_MASTER), now).unwrap();
+        assert!(!opened.rolled_back);
+    }
+
+    #[test]
+    fn resetting_deletes_the_vault_and_returns_to_first_run() {
+        let dir = TempDir::new().unwrap();
+        let now = Instant::now();
+        let mut session = unlocked(&dir, now);
+        session.add(draft("a.com", "u", "p"), now).unwrap();
+        session.lock();
+
+        session.reset().unwrap();
+
+        assert!(!session.vault_exists());
+        assert!(!session.is_unlocked());
+        // The credentials are gone, not hidden: a vault created afterwards opens empty.
+        session.create(&secret(MASTER), now).unwrap();
+        assert!(session.list("", now).unwrap().is_empty());
+    }
+
+    #[test]
+    fn a_vault_created_after_a_reset_does_not_look_like_a_rollback() {
+        let dir = TempDir::new().unwrap();
+        let now = Instant::now();
+        let mut session = unlocked(&dir, now);
+        // Push the counter up, so a surviving `.seen` record would out-number a fresh vault.
+        for site in ["a.com", "b.com", "c.com"] {
+            session.add(draft(site, "u", "p"), now).unwrap();
+        }
+        session.lock();
+
+        session.reset().unwrap();
+
+        // Start over — a lost password is the reason this exists — with a different master.
+        session.create(&secret("a different master"), now).unwrap();
+        session.lock();
+        let opened = session.unlock(&secret("a different master"), now).unwrap();
+
+        // Had the reset spared the `.seen` file, the new vault would carry a lower counter than
+        // the deleted one and cry rollback on every unlock until it happened to save past it.
+        assert!(!opened.rolled_back);
+    }
+
+    #[test]
+    fn resetting_with_no_vault_is_harmless() {
+        let dir = TempDir::new().unwrap();
+        let mut session = session_in(&dir);
+
+        // Nothing to delete; the end state is identical either way.
+        assert!(session.reset().is_ok());
+        assert!(!session.vault_exists());
     }
 
     #[test]

@@ -5,6 +5,27 @@ and versions follow [Semantic Versioning](https://semver.org/).
 
 A major version bump means the vault format changed in a way an older build cannot read.
 
+## [0.5.0] — 2026-08-28
+
+Two ways to manage the master password, and the first release since 0.3.0 whose behaviour a
+user will notice. The vault format is unchanged (still version 2), so a 0.4.x vault opens here
+and a 0.5.0 vault opens in 0.4.x.
+
+### Added
+
+- **Change the master password** from inside an open vault, without losing a credential. The
+  vault is re-encrypted under a key derived from the new password with a fresh salt — and at the
+  current KDF cost, so a change also upgrades an older vault's cost. The current password is
+  required and verified in Rust, so a vault left open and unattended cannot have its master
+  password changed out from under its owner. The vault stays open under the new key; no re-unlock.
+- **Delete the vault and start over**, from a "Forgot your master password?" affordance on the
+  unlock screen. There is no password recovery and there never will be — the key derives from the
+  master password and nothing else, so anything that could reopen the vault for you could reopen
+  it for anyone. This is the honest alternative: it recovers nothing and discards everything,
+  behind a two-step confirmation that states the cost in plain words. It deletes the counter
+  record along with the vault, so a vault created next does not masquerade as a rollback of the
+  deleted one.
+
 ## [0.4.1] — 2026-08-10
 
 Nothing in the application changed. The installers behave exactly as 0.4.0's do; what this
@@ -136,6 +157,7 @@ First release. Everything in the agreed scope works; nothing is signed yet.
 - The master password unavoidably exists in unwiped memory in the WebView and in the IPC
   payload. It is never stored, never logged, and discarded as soon as the key is derived.
 
+[0.5.0]: https://github.com/Xiza73/password-manager/releases/tag/v0.5.0
 [0.4.1]: https://github.com/Xiza73/password-manager/releases/tag/v0.4.1
 [0.4.0]: https://github.com/Xiza73/password-manager/releases/tag/v0.4.0
 [0.3.0]: https://github.com/Xiza73/password-manager/releases/tag/v0.3.0

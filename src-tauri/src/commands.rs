@@ -126,6 +126,30 @@ pub fn lock(state: State<'_, AppState>) -> Result<(), IpcError> {
     })
 }
 
+/// Deletes the vault and returns the app to first-run.
+///
+/// The way out of a lost master password: it recovers nothing and discards everything. The
+/// interface confirms with the user before ever reaching this.
+#[tauri::command]
+pub fn reset_vault(state: State<'_, AppState>) -> Result<(), IpcError> {
+    with_session(&state, |session| session.reset())
+}
+
+/// Re-keys the open vault under a new master password, keeping every credential.
+///
+/// The current password is required and verified in Rust, so the interface never decides whether
+/// it was correct. A wrong one comes back as `unauthentic`, the same code a bad unlock gives.
+#[tauri::command]
+pub fn change_master_password(
+    current_password: SecretString,
+    new_password: SecretString,
+    state: State<'_, AppState>,
+) -> Result<(), IpcError> {
+    with_session(&state, |session| {
+        session.change_master_password(&current_password, &new_password, Instant::now())
+    })
+}
+
 #[tauri::command]
 pub fn list_entries(
     query: Option<String>,

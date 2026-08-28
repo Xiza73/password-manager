@@ -48,6 +48,8 @@ impl Harness {
                 commands::create_vault,
                 commands::unlock,
                 commands::lock,
+                commands::reset_vault,
+                commands::change_master_password,
                 commands::list_entries,
                 commands::reveal_entry,
                 commands::add_entry,
@@ -292,6 +294,78 @@ fn reports_a_missing_credential_with_the_expected_code() {
             json!({ "id": "00000000-0000-4000-8000-000000000000" })
         ),
         "not_found"
+    );
+}
+
+#[test]
+fn resets_the_vault_back_to_first_run() {
+    let harness = Harness::new();
+    harness.ok("create_vault", json!({ "password": MASTER }));
+    harness.ok(
+        "add_entry",
+        json!({ "draft": draft("github.com", "octocat", "hunter2") }),
+    );
+
+    harness.ok("reset_vault", json!({}));
+
+    // The only way back in when the master password is lost: it recovers nothing and discards
+    // everything, leaving the app exactly as a fresh installation.
+    assert_eq!(harness.ok("vault_exists", json!({})), json!(false));
+    assert_eq!(harness.ok("is_unlocked", json!({})), json!(false));
+
+    harness.ok("create_vault", json!({ "password": MASTER }));
+    assert!(harness
+        .ok("list_entries", json!({ "query": null }))
+        .as_array()
+        .expect("a list")
+        .is_empty());
+}
+
+#[test]
+fn changes_the_master_password_over_ipc() {
+    let harness = Harness::new();
+    harness.ok("create_vault", json!({ "password": MASTER }));
+    let id = harness.ok(
+        "add_entry",
+        json!({ "draft": draft("github.com", "octocat", "hunter2") }),
+    );
+    let id = id.as_str().expect("an id").to_owned();
+
+    // camelCase keys: Tauri converts each snake_case command parameter to camelCase at the JSON
+    // boundary, so `current_password` is received as `currentPassword`. This test is what proved
+    // that, and the typed IPC layer sends the same shape.
+    harness.ok(
+        "change_master_password",
+        json!({ "currentPassword": MASTER, "newPassword": "a brand new master password" }),
+    );
+
+    harness.ok("lock", json!({}));
+    // The old password is refused; the new one opens the vault with its credential intact.
+    assert_eq!(
+        harness.error_code("unlock", json!({ "password": MASTER })),
+        "unauthentic"
+    );
+    harness.ok(
+        "unlock",
+        json!({ "password": "a brand new master password" }),
+    );
+    assert_eq!(
+        harness.ok("reveal_entry", json!({ "id": id }))["password"],
+        json!("hunter2")
+    );
+}
+
+#[test]
+fn refuses_a_password_change_with_a_wrong_current_password() {
+    let harness = Harness::new();
+    harness.ok("create_vault", json!({ "password": MASTER }));
+
+    assert_eq!(
+        harness.error_code(
+            "change_master_password",
+            json!({ "currentPassword": "not the current one", "newPassword": "a brand new master password" })
+        ),
+        "unauthentic"
     );
 }
 

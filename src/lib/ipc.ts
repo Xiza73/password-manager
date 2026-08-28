@@ -108,6 +108,26 @@ export const vault = {
 
   lock: () => call<void>('lock'),
 
+  /**
+   * Deletes the vault and returns the app to first-run.
+   *
+   * The only way back in when the master password is lost: it recovers nothing and discards
+   * everything. There is no recovery by design — the key derives from the password and nothing
+   * else — so this is the honest alternative, not a workaround.
+   */
+  reset: () => call<void>('reset_vault'),
+
+  /**
+   * Re-keys the vault under a new master password, keeping every credential.
+   *
+   * The current password is required and verified in Rust — the session already proved knowledge
+   * at unlock, but re-keying every credential asks for it again so a vault left open cannot have
+   * its password changed by someone who walked up to it. The vault stays open under the new key;
+   * no re-unlock. A wrong current password rejects with `unauthentic`.
+   */
+  changeMasterPassword: (current: string, next: string) =>
+    call<void>('change_master_password', { currentPassword: current, newPassword: next }),
+
   list: (query?: string) => call<CredentialSummary[]>('list_entries', { query: query ?? null }),
 
   reveal: (id: string) => call<RevealedCredential>('reveal_entry', { id }),
